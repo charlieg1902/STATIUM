@@ -713,68 +713,84 @@ def vb_card_html(vb, idx=0):
     for a in vb.get("ctx_alerts",[]):
         alert_html+=f'<div class="ctx-alert">{a}</div>'
 
-    # Compact 1X2 probability bar
+    # Compact 1X2 probability bar — single line to avoid Streamlit markdown code-block interpretation
     prob_html = ""
     p = vb.get("probs")
     if p:
         h_pct = p["home_win"]*100
         d_pct = p["draw"]*100
         a_pct = p["away_win"]*100
-        prob_html = f"""
-        <div style="margin:12px 0 6px">
-          <div style="font-size:.66rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">
-            Prob. 1·X·2 &nbsp;·&nbsp; xG: <b>{p['lam_h']}</b> – <b>{p['lam_a']}</b> &nbsp;·&nbsp; Over 2.5: <b>{p['over25']*100:.0f}%</b> &nbsp;·&nbsp; BTTS: <b>{p['btts']*100:.0f}%</b>
-          </div>
-          <div class="card-prob-bar">
-            <div class="cpb-home" style="width:{h_pct:.1f}%">{h_pct:.0f}%</div>
-            <div class="cpb-draw" style="width:{d_pct:.1f}%">{d_pct:.0f}%</div>
-            <div class="cpb-away" style="width:{a_pct:.1f}%">{a_pct:.0f}%</div>
-          </div>
-        </div>"""
+        lam_h  = p["lam_h"]
+        lam_a  = p["lam_a"]
+        o25    = f"{p['over25']*100:.0f}%"
+        btts   = f"{p['btts']*100:.0f}%"
+        prob_html = (
+            f'<div style="margin:12px 0 6px">'
+            f'<div style="font-size:.66rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">'
+            f'xG: <b>{lam_h}</b> – <b>{lam_a}</b> &nbsp;|&nbsp; Over 2.5: <b>{o25}</b> &nbsp;|&nbsp; BTTS: <b>{btts}</b>'
+            f'</div>'
+            f'<div class="card-prob-bar">'
+            f'<div class="cpb-home" style="width:{h_pct:.1f}%">{h_pct:.0f}%</div>'
+            f'<div class="cpb-draw" style="width:{d_pct:.1f}%">{d_pct:.0f}%</div>'
+            f'<div class="cpb-away" style="width:{a_pct:.1f}%">{a_pct:.0f}%</div>'
+            f'</div></div>'
+        )
 
-    # Mini form row
+    # Mini form row — single line
     form_h = vb.get("home_form", [])
     form_a = vb.get("away_form", [])
     form_html = ""
     if form_h or form_a:
         fh_badges = render_form_mini(form_h)
         fa_badges = render_form_mini(form_a)
-        form_html = f"""
-        <div style="display:flex;gap:18px;margin-top:8px;align-items:center;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:5px">
-            <span style="font-size:.68rem;color:#94a3b8;white-space:nowrap">🏠 Forma</span>{fh_badges}
-          </div>
-          <div style="display:flex;align-items:center;gap:5px">
-            <span style="font-size:.68rem;color:#94a3b8;white-space:nowrap">✈️ Forma</span>{fa_badges}
-          </div>
-        </div>"""
+        form_html = (
+            f'<div style="display:flex;gap:18px;margin-top:8px;align-items:center;flex-wrap:wrap">'
+            f'<div style="display:flex;align-items:center;gap:5px">'
+            f'<span style="font-size:.68rem;color:#94a3b8;white-space:nowrap">Local</span>{fh_badges}'
+            f'</div>'
+            f'<div style="display:flex;align-items:center;gap:5px">'
+            f'<span style="font-size:.68rem;color:#94a3b8;white-space:nowrap">Visit.</span>{fa_badges}'
+            f'</div></div>'
+        )
 
-    return f"""
-    <div class="vb-card vb-card-{vb['conf_key']}" style="animation-delay:{delay:.2f}s">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
-        <div>
-          <p class="vb-match">{vb['home']} <span style="color:#94a3b8;font-weight:400">vs</span> {vb['away']}</p>
-          <p class="vb-meta">📅 {date_str} &nbsp;·&nbsp; Jornada {vb.get('matchday','?')} &nbsp;·&nbsp; Mercado: <b>{vb['label']}</b></p>
-          <div class="vb-ctx-row">{ctx_badge_html(hctx)} <span style="color:#cbd5e1;font-size:.75rem;align-self:center">vs</span> {ctx_badge_html(actx)}</div>
-        </div>
-        <div style="text-align:right">
-          <div class="{vb['ev_css']} ev-pill">📈 EV +{ev_pct:.1f}%</div>
-          <div style="margin-top:6px"><span class="conf-tag {vb['conf_css']}">{vb['conf_icon']} Confianza {vb['conf_label']}</span></div>
-        </div>
-      </div>
-      {prob_html}
-      <div class="vb-details">
-        <div class="vb-detail-item"><span class="vb-detail-label">Cuota disponible</span><span class="vb-detail-val green">📌 {vb['bk_odds']}</span></div>
-        <div class="vb-detail-item"><span class="vb-detail-label">Cuota justa</span><span class="vb-detail-val">{round(1/vb['model_p'],2)}</span></div>
-        <div class="vb-detail-item"><span class="vb-detail-label">P. modelo</span><span class="vb-detail-val">{vb['model_p']*100:.1f}%</span></div>
-        <div class="vb-detail-item"><span class="vb-detail-label">P. implícita</span><span class="vb-detail-val">{vb['implied']*100:.1f}%</span></div>
-        <div class="vb-detail-item"><span class="vb-detail-label">Edge</span><span class="vb-detail-val green">+{edge_pp:.1f}pp</span></div>
-        <div class="vb-detail-item"><span class="vb-detail-label">xG Local</span><span class="vb-detail-val blue">{vb['probs']['lam_h'] if vb.get('probs') else '—'}</span></div>
-        <div class="vb-detail-item"><span class="vb-detail-label">xG Visit.</span><span class="vb-detail-val blue">{vb['probs']['lam_a'] if vb.get('probs') else '—'}</span></div>
-      </div>
-      {form_html}
-      {alert_html}
-    </div>"""
+    xg_h = p["lam_h"] if p else "—"
+    xg_a = p["lam_a"] if p else "—"
+    fair  = round(1/vb["model_p"], 2)
+
+    d_row = (
+        f'<div class="vb-details">'
+        f'<div class="vb-detail-item"><span class="vb-detail-label">Cuota disponible</span><span class="vb-detail-val green">📌 {vb["bk_odds"]}</span></div>'
+        f'<div class="vb-detail-item"><span class="vb-detail-label">Cuota justa</span><span class="vb-detail-val">{fair}</span></div>'
+        f'<div class="vb-detail-item"><span class="vb-detail-label">P. modelo</span><span class="vb-detail-val">{vb["model_p"]*100:.1f}%</span></div>'
+        f'<div class="vb-detail-item"><span class="vb-detail-label">P. implícita</span><span class="vb-detail-val">{vb["implied"]*100:.1f}%</span></div>'
+        f'<div class="vb-detail-item"><span class="vb-detail-label">Edge</span><span class="vb-detail-val green">+{edge_pp:.1f}pp</span></div>'
+        f'<div class="vb-detail-item"><span class="vb-detail-label">xG Local</span><span class="vb-detail-val blue">{xg_h}</span></div>'
+        f'<div class="vb-detail-item"><span class="vb-detail-label">xG Visit.</span><span class="vb-detail-val blue">{xg_a}</span></div>'
+        f'</div>'
+    )
+
+    hbadge = ctx_badge_html(hctx)
+    abadge = ctx_badge_html(actx)
+
+    return (
+        f'<div class="vb-card vb-card-{vb["conf_key"]}" style="animation-delay:{delay:.2f}s">'
+        f'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">'
+        f'<div>'
+        f'<p class="vb-match">{vb["home"]} <span style="color:#94a3b8;font-weight:400">vs</span> {vb["away"]}</p>'
+        f'<p class="vb-meta">📅 {date_str} &nbsp;·&nbsp; Jornada {vb.get("matchday","?")} &nbsp;·&nbsp; Mercado: <b>{vb["label"]}</b></p>'
+        f'<div class="vb-ctx-row">{hbadge} <span style="color:#cbd5e1;font-size:.75rem;align-self:center">vs</span> {abadge}</div>'
+        f'</div>'
+        f'<div style="text-align:right">'
+        f'<div class="{vb["ev_css"]} ev-pill">📈 EV +{ev_pct:.1f}%</div>'
+        f'<div style="margin-top:6px"><span class="conf-tag {vb["conf_css"]}">{vb["conf_icon"]} Confianza {vb["conf_label"]}</span></div>'
+        f'</div>'
+        f'</div>'
+        f'{prob_html}'
+        f'{d_row}'
+        f'{form_html}'
+        f'{alert_html}'
+        f'</div>'
+    )
 
 # ═══════════════════════════════════════════════════════════
 # SIDEBAR SUMMARY (rendered after pre-compute)
