@@ -27,24 +27,25 @@ BRAND_GOLD   = "#f59e0b"
 LOGO_SVG = """
 <svg width="52" height="52" viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%"   stop-color="#00c896"/>
+    <linearGradient id="lg1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00c896"/>
       <stop offset="100%" stop-color="#3b82f6"/>
     </linearGradient>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
   </defs>
-  <rect width="52" height="52" rx="14" fill="url(#g1)"/>
+  <rect width="52" height="52" rx="14" fill="url(#lg1)"/>
   <rect x="9"  y="32" width="7" height="11" rx="2" fill="white" opacity="0.55"/>
   <rect x="19" y="23" width="7" height="20" rx="2" fill="white" opacity="0.75"/>
   <rect x="29" y="15" width="7" height="28" rx="2" fill="white"/>
   <polyline points="12,36 22,27 32,19 39,13" stroke="white" stroke-width="1.5"
-            fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.5" stroke-dasharray="3,2"/>
-  <circle cx="39" cy="13" r="3.5" fill="white" filter="url(#glow)"/>
+            fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+  <circle cx="39" cy="13" r="3.5" fill="white"/>
 </svg>
 """
+
+import base64
+def logo_img(size=52):
+    b64 = base64.b64encode(LOGO_SVG.strip().encode()).decode()
+    return f'<img src="data:image/svg+xml;base64,{b64}" width="{size}" height="{size}" style="border-radius:10px">'
 
 st.markdown(f"""
 <style>
@@ -565,7 +566,7 @@ def main():
     # ── Header con logo ─────────────────────────────────────
     st.markdown(f"""
     <div class="stat-header">
-      <div class="stat-logo">{LOGO_SVG}</div>
+      <div class="stat-logo">{logo_img(56)}</div>
       <div>
         <div class="stat-title">STATITUM</div>
         <div class="stat-subtitle">Análisis estadístico deportivo · Detección de value bets con EV real</div>
@@ -586,8 +587,8 @@ def main():
     with st.sidebar:
         st.markdown(f"""
         <div style="display:flex;align-items:center;gap:10px;padding:8px 0 16px">
-          {LOGO_SVG}
-          <span style="font-weight:800;font-size:1.1rem;color:#0f172a">STATITUM</span>
+          {logo_img(40)}
+          <span style="font-weight:800;font-size:1.1rem;background:linear-gradient(135deg,#00c896,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">STATITUM</span>
         </div>
         """, unsafe_allow_html=True)
         st.divider()
