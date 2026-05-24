@@ -84,14 +84,20 @@ st.markdown(f"""
   .stat-card-label{{ font-size: 0.75rem; color: #64748b; margin-top: 2px; }}
 
   /* ── Value Bet Cards ── */
+  @keyframes slideInUp {{
+    from {{ opacity: 0; transform: translateY(22px); }}
+    to   {{ opacity: 1; transform: translateY(0); }}
+  }}
+
   .vb-card {{
     background: white; border-radius: 16px; padding: 20px 22px;
     margin-bottom: 14px; position: relative; overflow: hidden;
     box-shadow: 0 4px 20px rgba(0,0,0,0.07);
     border: 1px solid #e2e8f0;
-    transition: transform 0.15s;
+    transition: transform 0.15s, box-shadow 0.15s;
+    animation: slideInUp 0.45s ease-out both;
   }}
-  .vb-card:hover {{ transform: translateY(-1px); box-shadow: 0 8px 28px rgba(0,0,0,0.10); }}
+  .vb-card:hover {{ transform: translateY(-2px); box-shadow: 0 10px 32px rgba(0,0,0,0.11); }}
   .vb-card-high   {{ border-left: 5px solid #10b981; box-shadow: 0 4px 20px rgba(16,185,129,0.12); }}
   .vb-card-medium {{ border-left: 5px solid {BRAND_GOLD}; box-shadow: 0 4px 20px rgba(245,158,11,0.10); }}
   .vb-card-low    {{ border-left: 5px solid #f97316; box-shadow: 0 4px 20px rgba(249,115,22,0.08); }}
@@ -126,6 +132,7 @@ st.markdown(f"""
   .vb-detail-label {{ font-size: 0.68rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; }}
   .vb-detail-val   {{ font-weight: 700; color: #0f172a; font-size: 0.92rem; }}
   .vb-detail-val.green {{ color: #059669; }}
+  .vb-detail-val.blue  {{ color: #3b82f6; }}
 
   /* ── Context badges ── */
   .ctx-badge  {{ display:inline-block; font-size:.72rem; font-weight:600; padding:2px 9px; border-radius:12px; }}
@@ -144,7 +151,16 @@ st.markdown(f"""
     padding: 7px 12px; font-size: .80rem; color: #92400e; margin-top: 8px;
   }}
 
-  /* ── Probability bars ── */
+  /* ── Compact prob bar (inside card) ── */
+  .card-prob-bar {{
+    display:flex; height:22px; border-radius:6px; overflow:hidden; gap:1px;
+    margin: 10px 0 4px;
+  }}
+  .cpb-home {{ background:linear-gradient(135deg,#10b981,#34d399); display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:700; min-width:28px; }}
+  .cpb-draw {{ background:linear-gradient(135deg,#94a3b8,#cbd5e1); display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:700; min-width:28px; }}
+  .cpb-away {{ background:linear-gradient(135deg,#3b82f6,#60a5fa); display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:700; min-width:28px; }}
+
+  /* ── Full probability bars (Tab 2) ── */
   .prob-bar-wrap {{ margin: 14px 0 4px; }}
   .prob-bar-label {{ font-size: .70rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; }}
   .prob-bar-1x2 {{ display:flex; height:28px; border-radius:8px; overflow:hidden; gap:1px; }}
@@ -275,10 +291,9 @@ def fetch_odds(odds_key, sport_key):
     return data if isinstance(data, list) else []
 
 # ═══════════════════════════════════════════════════════════
-# CONTEXTO COMPETITIVO (con fix título decidido)
+# CONTEXTO COMPETITIVO
 # ═══════════════════════════════════════════════════════════
 def is_title_decided(standings_df, remaining):
-    """Retorna True si el campeón ya está matemáticamente decidido."""
     if standings_df.empty or len(standings_df) < 2:
         return False
     pts1 = standings_df[standings_df["position"]==1]["points"].values
@@ -312,38 +327,22 @@ def get_team_context(team_id, standings_df, league_cfg, matchday, title_decided=
     pts_rel   = pts_at(safe_pos+1)
     pts_cl    = pts_at(cl_spots)
 
-    # Campeón ya decidido
     if pos==1 and title_decided:
         return {"label":"Campeón 🏆","emoji":"🥇","css":"ctx-champ-won","alert":False,"dead":False}
-
-    # Pelea título (solo si matemáticamente posible)
     if pos<=2 and not title_decided:
         return {"label":"Pelea título","emoji":"🏆","css":"ctx-title","alert":True,"dead":False}
-
-    # Champions
     if pos<=cl_spots:
         return {"label":"Zona Champions","emoji":"⭐","css":"ctx-champion","alert":True,"dead":False}
-
-    # Persigue Champions
     if pos==cl_spots+1 and pts>=pts_cl-remaining*3:
         return {"label":"Persigue Champions","emoji":"⭐","css":"ctx-champion","alert":True,"dead":False}
-
-    # Europa
     if pos<=euro_spots:
         return {"label":"Zona Europa","emoji":"🌍","css":"ctx-europa","alert":True,"dead":False}
-
-    # Descenso
     if pos>safe_pos:
         return {"label":"Zona descenso","emoji":"🔴","css":"ctx-relegation","alert":True,"dead":False}
-
-    # Pelea descenso
     if pts-pts_rel<=3:
         return {"label":"Pelea descenso","emoji":"🟠","css":"ctx-nearrel","alert":True,"dead":False}
-
-    # Sin motivación (zona muerta en temporada tardía)
     if late and pts>pts_rel+remaining*3 and pos>euro_spots:
         return {"label":"Sin motivación","emoji":"😴","css":"ctx-dead","alert":True,"dead":True}
-
     return {"label":"Zona media","emoji":"➖","css":"ctx-mid","alert":False,"dead":False}
 
 def match_alerts(home_ctx, away_ctx, matchday, league_cfg):
@@ -354,9 +353,9 @@ def match_alerts(home_ctx, away_ctx, matchday, league_cfg):
     if home_ctx["dead"] and away_ctx["dead"]:
         alerts.append("😴 Ambos equipos sin motivación real — resultado muy incierto.")
     elif home_ctx["dead"]:
-        alerts.append(f"😴 Local sin motivación extra — posibles rotaciones.")
+        alerts.append("😴 Local sin motivación extra — posibles rotaciones.")
     elif away_ctx["dead"]:
-        alerts.append(f"😴 Visitante sin motivación extra — posibles rotaciones.")
+        alerts.append("😴 Visitante sin motivación extra — posibles rotaciones.")
     if home_ctx["css"]=="ctx-relegation" and away_ctx["dead"]:
         alerts.append("🔴 Descenso vs sin motivación — altísima varianza.")
     elif away_ctx["css"]=="ctx-relegation" and home_ctx["dead"]:
@@ -494,12 +493,189 @@ def detect_value_bets(probs, bk, home_name, away_name, ev_threshold):
     return found
 
 # ═══════════════════════════════════════════════════════════
+# ANÁLISIS DE PICK ("¿Por qué este pick?")
+# ═══════════════════════════════════════════════════════════
+def generate_analysis(vb, ratings):
+    """Genera explicación textual en Markdown del razonamiento del modelo para un pick."""
+    label    = vb["label"]
+    p        = vb.get("probs")
+    hr       = ratings.get(vb.get("home_id"), {})
+    ar       = ratings.get(vb.get("away_id"), {})
+    home     = vb["home"]
+    away     = vb["away"]
+    model_p  = vb["model_p"] * 100
+    impl_p   = vb["implied"] * 100
+    edge_pp  = vb["edge"] * 100
+    bk_odd   = vb["bk_odds"]
+    fair     = round(1 / vb["model_p"], 2) if vb["model_p"] > 0 else 99
+
+    att_h = hr.get("att_h", 1.0)
+    att_a = ar.get("att_a", 1.0)
+    def_h = hr.get("def_h", 1.0)
+    def_a = ar.get("def_a", 1.0)
+    gs_h  = hr.get("gs_avg", 1.35)
+    gs_a  = ar.get("gs_avg", 1.10)
+    gc_h  = hr.get("gc_avg", 1.10)
+    gc_a  = ar.get("gc_avg", 1.35)
+    n_h   = hr.get("n_eff", 0)
+    n_a   = ar.get("n_eff", 0)
+
+    lam_h = p["lam_h"] if p else 1.35
+    lam_a = p["lam_a"] if p else 1.10
+    xg_total = round(lam_h + lam_a, 2)
+
+    def rating_desc(val, low_is_good=False):
+        if low_is_good:
+            if val < 0.88: return "muy sólido ✅"
+            elif val < 0.97: return "sólido ✅"
+            elif val <= 1.05: return "promedio ➡️"
+            elif val <= 1.15: return "poroso ⚠️"
+            else: return "muy poroso 🔴"
+        else:
+            if val > 1.20: return "muy superior 🔥"
+            elif val > 1.07: return "superior 📈"
+            elif val >= 0.95: return "promedio ➡️"
+            elif val >= 0.85: return "inferior 📉"
+            else: return "muy inferior 🔴"
+
+    def sample_note(n_eff):
+        if n_eff < 7:  return f"⚠️ muestra pequeña ({n_eff:.1f} partidos efectivos) — rating fuertemente ajustado al promedio."
+        elif n_eff < 15: return f"muestra moderada ({n_eff:.1f} partidos efectivos)."
+        else:           return f"muestra sólida ({n_eff:.1f} partidos efectivos)."
+
+    lines = []
+
+    # ── Market-specific reasoning ──────────────────────────
+    if label == "1 Local":
+        lines.append(f"#### 🏠 Análisis: Victoria de {home}")
+        lines.append(
+            f"**Ataque local de {home}:** `{att_h:.3f}x` la media de liga — {rating_desc(att_h)}. "
+            f"Promedia **{gs_h:.2f} goles/partido** en casa."
+        )
+        lines.append(
+            f"**Defensa visitante de {away}:** `{def_a:.3f}x` la media — {rating_desc(def_a, low_is_good=True)}. "
+            f"Concede **{gc_a:.2f} goles/partido** como visitante."
+        )
+        lines.append(
+            f"**xG esperados:** {home} generará ~**{lam_h}** goles vs ~**{lam_a}** de {away}. "
+            f"El modelo favorece al local con ventaja de **{round(lam_h-lam_a, 2):+.2f} xG**."
+        )
+
+    elif label == "2 Visitante":
+        lines.append(f"#### ✈️ Análisis: Victoria de {away}")
+        lines.append(
+            f"**Ataque visitante de {away}:** `{att_a:.3f}x` la media de liga — {rating_desc(att_a)}. "
+            f"Promedia **{gs_a:.2f} goles/partido** fuera de casa."
+        )
+        lines.append(
+            f"**Defensa local de {home}:** `{def_h:.3f}x` la media — {rating_desc(def_h, low_is_good=True)}. "
+            f"Concede **{gc_h:.2f} goles/partido** en casa."
+        )
+        lines.append(
+            f"**xG esperados:** {away} generará ~**{lam_a}** goles fuera vs ~**{lam_h}** del local. "
+            f"El modelo da ventaja al visitante de **{round(lam_a-lam_h, 2):+.2f} xG**."
+        )
+
+    elif label == "X Empate":
+        balance = abs(lam_h - lam_a)
+        bal_desc = "muy equilibrado ⚖️" if balance < 0.25 else ("equilibrado" if balance < 0.50 else "con ligero desequilibrio")
+        lines.append(f"#### ⚖️ Análisis: Empate")
+        lines.append(
+            f"**Equilibrio de fuerzas:** xG {home} **{lam_h}** vs {away} **{lam_a}** — {bal_desc} "
+            f"(diferencia de {balance:.2f} goles esperados)."
+        )
+        lines.append(
+            f"**Defensa local {home}:** `{def_h:.3f}x` — {rating_desc(def_h, low_is_good=True)}. "
+            f"**Defensa visit. {away}:** `{def_a:.3f}x` — {rating_desc(def_a, low_is_good=True)}."
+        )
+        lines.append(
+            f"**xG total:** {xg_total} goles esperados — "
+            f"{'partidos de bajo marcador favorecen el empate en distribución Poisson.' if xg_total < 2.4 else 'la similitud de las fuerzas aumenta la probabilidad de empate.'}"
+        )
+
+    elif label == "Over 2.5":
+        lines.append(f"#### ⚽ Análisis: Over 2.5 goles")
+        lines.append(
+            f"**xG combinados:** {lam_h} + {lam_a} = **{xg_total}** goles esperados — "
+            f"{'muy por encima del umbral 2.5 ✅' if xg_total > 3.2 else 'por encima del umbral 2.5 ✅' if xg_total > 2.5 else 'cerca del umbral ⚠️'}."
+        )
+        lines.append(
+            f"**Potencia ofensiva {home}:** `{att_h:.3f}x` en casa — {rating_desc(att_h)}, {gs_h:.2f} goles/pj."
+        )
+        lines.append(
+            f"**Potencia ofensiva {away}:** `{att_a:.3f}x` fuera — {rating_desc(att_a)}, {gs_a:.2f} goles/pj."
+        )
+
+    elif label == "Under 2.5":
+        lines.append(f"#### 🛡️ Análisis: Under 2.5 goles")
+        lines.append(
+            f"**xG combinados:** {lam_h} + {lam_a} = **{xg_total}** goles esperados — "
+            f"{'claramente bajo el umbral 2.5 ✅' if xg_total < 2.0 else 'por debajo del umbral 2.5 ✅' if xg_total < 2.5 else 'cerca del umbral ⚠️ — la distribución Poisson da valor al Under.'}."
+        )
+        lines.append(
+            f"**Defensa local {home}:** `{def_h:.3f}x` — {rating_desc(def_h, low_is_good=True)}, concede {gc_h:.2f} goles/pj."
+        )
+        lines.append(
+            f"**Defensa visit. {away}:** `{def_a:.3f}x` — {rating_desc(def_a, low_is_good=True)}, concede {gc_a:.2f} goles/pj."
+        )
+
+    # ── Veredicto estadístico ──────────────────────────────
+    lines.append(
+        f"**📊 Veredicto del modelo:** Probabilidad estimada **{model_p:.1f}%** "
+        f"(cuota justa `{fair}`) vs cuota de mercado `{bk_odd}` (implícita {impl_p:.1f}%). "
+        f"El mercado subestima esta probabilidad en **+{edge_pp:.1f} pp**."
+    )
+
+    # ── Calidad de datos ──────────────────────────────────
+    lines.append(
+        f"**🔬 Calidad de datos:** {home} — {sample_note(n_h)}  "
+        f"{away} — {sample_note(n_a)}"
+    )
+
+    # ── Contexto motivacional ─────────────────────────────
+    home_ctx = vb.get("home_ctx", {})
+    away_ctx = vb.get("away_ctx", {})
+    if home_ctx.get("dead") or away_ctx.get("dead"):
+        who = "Local" if home_ctx.get("dead") else "Visitante"
+        lines.append(
+            f"**⚠️ Riesgo motivacional:** {who} en zona sin motivación — "
+            f"posibles rotaciones que el modelo estadístico no puede anticipar. Considera reducir stake."
+        )
+
+    # ── Probabilidades adicionales del partido ────────────
+    if p:
+        o25_pct  = p["over25"] * 100
+        btts_pct = p["btts"]   * 100
+        lines.append(
+            f"**📐 Contexto del partido:** Over 2.5 → {o25_pct:.0f}% · "
+            f"BTTS → {btts_pct:.0f}% · xG local {lam_h} · xG visit. {lam_a}"
+        )
+
+    # ── CLV ───────────────────────────────────────────────
+    lines.append("---")
+    lines.append(
+        f"*💡 **CLV Tracking:** Anota esta cuota (`{bk_odd}`). Si la cuota de cierre el día del partido "
+        f"es inferior, confirma que el modelo identificó valor real. El CLV a largo plazo es el mejor "
+        f"indicador de la calidad del modelo.*"
+    )
+
+    return "\n\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════════════
 # UI COMPONENTS
 # ═══════════════════════════════════════════════════════════
 def render_form(form_list):
     html=""
     for res,css,gf,gc,v in form_list:
         html+=f'<span class="form-badge {css}" title="{gf:.0f}-{gc:.0f} ({v})">{res}</span>'
+    return html
+
+def render_form_mini(form_list, n=3):
+    """Mini form badges for inside cards (last n results)."""
+    html=""
+    for res,css,gf,gc,v in form_list[:n]:
+        html+=f'<span class="form-badge {css}" title="{gf:.0f}-{gc:.0f} ({v})" style="width:20px;height:20px;line-height:20px;font-size:10px">{res}</span>'
     return html
 
 def ctx_badge_html(ctx):
@@ -525,19 +701,56 @@ def prob_bar_html(p, home_name, away_name):
       </div>
     </div>"""
 
-def vb_card_html(vb):
+def vb_card_html(vb, idx=0):
     dt       = datetime.fromisoformat(vb["date"].replace("Z","+00:00"))
     date_str = dt.strftime("%a %d/%m · %H:%M UTC")
     hctx, actx = vb["home_ctx"], vb["away_ctx"]
     ev_pct   = vb["ev"]*100
     edge_pp  = vb["edge"]*100
+    delay    = idx * 0.07  # staggered animation
 
     alert_html=""
     for a in vb.get("ctx_alerts",[]):
         alert_html+=f'<div class="ctx-alert">{a}</div>'
 
+    # Compact 1X2 probability bar
+    prob_html = ""
+    p = vb.get("probs")
+    if p:
+        h_pct = p["home_win"]*100
+        d_pct = p["draw"]*100
+        a_pct = p["away_win"]*100
+        prob_html = f"""
+        <div style="margin:12px 0 6px">
+          <div style="font-size:.66rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">
+            Prob. 1·X·2 &nbsp;·&nbsp; xG: <b>{p['lam_h']}</b> – <b>{p['lam_a']}</b> &nbsp;·&nbsp; Over 2.5: <b>{p['over25']*100:.0f}%</b> &nbsp;·&nbsp; BTTS: <b>{p['btts']*100:.0f}%</b>
+          </div>
+          <div class="card-prob-bar">
+            <div class="cpb-home" style="width:{h_pct:.1f}%">{h_pct:.0f}%</div>
+            <div class="cpb-draw" style="width:{d_pct:.1f}%">{d_pct:.0f}%</div>
+            <div class="cpb-away" style="width:{a_pct:.1f}%">{a_pct:.0f}%</div>
+          </div>
+        </div>"""
+
+    # Mini form row
+    form_h = vb.get("home_form", [])
+    form_a = vb.get("away_form", [])
+    form_html = ""
+    if form_h or form_a:
+        fh_badges = render_form_mini(form_h)
+        fa_badges = render_form_mini(form_a)
+        form_html = f"""
+        <div style="display:flex;gap:18px;margin-top:8px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:5px">
+            <span style="font-size:.68rem;color:#94a3b8;white-space:nowrap">🏠 Forma</span>{fh_badges}
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <span style="font-size:.68rem;color:#94a3b8;white-space:nowrap">✈️ Forma</span>{fa_badges}
+          </div>
+        </div>"""
+
     return f"""
-    <div class="vb-card vb-card-{vb['conf_key']}">
+    <div class="vb-card vb-card-{vb['conf_key']}" style="animation-delay:{delay:.2f}s">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
         <div>
           <p class="vb-match">{vb['home']} <span style="color:#94a3b8;font-weight:400">vs</span> {vb['away']}</p>
@@ -549,21 +762,94 @@ def vb_card_html(vb):
           <div style="margin-top:6px"><span class="conf-tag {vb['conf_css']}">{vb['conf_icon']} Confianza {vb['conf_label']}</span></div>
         </div>
       </div>
-      <div class="vb-details" style="margin-top:14px">
+      {prob_html}
+      <div class="vb-details">
         <div class="vb-detail-item"><span class="vb-detail-label">Cuota disponible</span><span class="vb-detail-val green">📌 {vb['bk_odds']}</span></div>
         <div class="vb-detail-item"><span class="vb-detail-label">Cuota justa</span><span class="vb-detail-val">{round(1/vb['model_p'],2)}</span></div>
         <div class="vb-detail-item"><span class="vb-detail-label">P. modelo</span><span class="vb-detail-val">{vb['model_p']*100:.1f}%</span></div>
         <div class="vb-detail-item"><span class="vb-detail-label">P. implícita</span><span class="vb-detail-val">{vb['implied']*100:.1f}%</span></div>
         <div class="vb-detail-item"><span class="vb-detail-label">Edge</span><span class="vb-detail-val green">+{edge_pp:.1f}pp</span></div>
+        <div class="vb-detail-item"><span class="vb-detail-label">xG Local</span><span class="vb-detail-val blue">{vb['probs']['lam_h'] if vb.get('probs') else '—'}</span></div>
+        <div class="vb-detail-item"><span class="vb-detail-label">xG Visit.</span><span class="vb-detail-val blue">{vb['probs']['lam_a'] if vb.get('probs') else '—'}</span></div>
       </div>
+      {form_html}
       {alert_html}
     </div>"""
+
+# ═══════════════════════════════════════════════════════════
+# SIDEBAR SUMMARY (rendered after pre-compute)
+# ═══════════════════════════════════════════════════════════
+def render_sidebar_summary(all_vb, lc, ev_min_pct):
+    n_total  = len(all_vb)
+    n_high   = sum(1 for v in all_vb if v["conf_key"]=="high")
+    n_medium = sum(1 for v in all_vb if v["conf_key"]=="medium")
+    n_low    = sum(1 for v in all_vb if v["conf_key"]=="low")
+    avg_ev   = round(sum(v["ev"] for v in all_vb)*100/n_total, 1) if n_total else 0
+
+    # Param bar helper
+    def param_bar(label, val_str, pct):
+        pct = max(2, min(100, pct))
+        return f"""
+        <div style="margin:8px 0">
+          <div style="display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:3px">
+            <span style="color:#64748b">{label}</span>
+            <span style="font-weight:700;color:#0f172a">{val_str}</span>
+          </div>
+          <div style="background:#f1f5f9;border-radius:4px;height:5px">
+            <div style="background:linear-gradient(90deg,#00c896,#3b82f6);width:{pct}%;height:100%;border-radius:4px"></div>
+          </div>
+        </div>"""
+
+    decay_pct    = int(DECAY_RATE * 1000)        # 0.010 → 10 (out of ~20)
+    shrink_pct   = int(SHRINKAGE_K / 20 * 100)  # 10 → 50%
+    edge_pct_bar = int(MAX_EDGE * 100 / 25 * 100) # 17/25 → 68%
+    ev_bar_pct   = int(ev_min_pct / 15 * 100)   # scaled to 15% max
+
+    with st.sidebar:
+        # ── Summary card ──
+        st.markdown(f"""
+        <div style="background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:16px;padding:18px;margin:4px 0 16px">
+          <div style="color:#64748b;font-size:.68rem;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Picks detectados</div>
+          <div style="font-size:2.4rem;font-weight:800;color:white;line-height:1">{n_total}</div>
+          <div style="color:#475569;font-size:.72rem;margin-bottom:14px">value bets · EV medio +{avg_ev}%</div>
+          <div style="display:flex;gap:8px">
+            <div style="flex:1;background:rgba(16,185,129,0.18);border-radius:10px;padding:8px 6px;text-align:center;border:1px solid rgba(16,185,129,0.25)">
+              <div style="color:#34d399;font-size:1.3rem;font-weight:800">{n_high}</div>
+              <div style="color:#6ee7b7;font-size:.63rem;margin-top:1px">🟢 Alta</div>
+            </div>
+            <div style="flex:1;background:rgba(245,158,11,0.18);border-radius:10px;padding:8px 6px;text-align:center;border:1px solid rgba(245,158,11,0.25)">
+              <div style="color:#fcd34d;font-size:1.3rem;font-weight:800">{n_medium}</div>
+              <div style="color:#fde68a;font-size:.63rem;margin-top:1px">🟡 Media</div>
+            </div>
+            <div style="flex:1;background:rgba(249,115,22,0.18);border-radius:10px;padding:8px 6px;text-align:center;border:1px solid rgba(249,115,22,0.25)">
+              <div style="color:#fb923c;font-size:1.3rem;font-weight:800">{n_low}</div>
+              <div style="color:#fed7aa;font-size:.63rem;margin-top:1px">🟠 Baja</div>
+            </div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ── Model parameters visual ──
+        with st.expander("⚙️ Parámetros del modelo", expanded=False):
+            st.markdown(f"""
+            <div style="padding:4px 0">
+              {param_bar("EV mínimo", f"{ev_min_pct}%", ev_bar_pct)}
+              {param_bar("Shrinkage K", str(SHRINKAGE_K), shrink_pct)}
+              {param_bar("Decay λ", str(DECAY_RATE), decay_pct * 5)}
+              {param_bar("Edge máx.", f"{int(MAX_EDGE*100)}pp", edge_pct_bar)}
+            </div>
+            <div style="margin-top:8px;font-size:.70rem;color:#94a3b8;line-height:1.5">
+              <b>Shrinkage:</b> atrae ratings extremos al promedio cuando la muestra es pequeña.<br>
+              <b>Decay:</b> pondera partidos recientes con mayor peso exponencial.<br>
+              <b>Edge máx.:</b> filtra picks con ventaja irreal (&gt;{int(MAX_EDGE*100)}pp).
+            </div>
+            """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════
 def main():
-    # ── Header con logo ─────────────────────────────────────
+    # ── Header ──────────────────────────────────────────────
     st.markdown(f"""
     <div class="stat-header">
       <div class="stat-logo">{logo_img(56)}</div>
@@ -583,10 +869,10 @@ def main():
         st.error("⚠️ Configura las API Keys en **Settings → Secrets**.")
         st.stop()
 
-    # ── Sidebar ──────────────────────────────────────────────
+    # ── Sidebar – Part 1: Controls ────────────────────────
     with st.sidebar:
         st.markdown(f"""
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 0 16px">
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0 14px">
           {logo_img(40)}
           <span style="font-weight:800;font-size:1.1rem;background:linear-gradient(135deg,#00c896,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">STATITUM</span>
         </div>
@@ -598,12 +884,6 @@ def main():
         ev_min_pct  = st.slider("🎯 EV mínimo (%)", 2, 12, 4)
         ev_threshold = ev_min_pct / 100
         st.divider()
-        with st.expander("⚙️ Parámetros del modelo"):
-            st.markdown(f"""
-            - **Shrinkage** K={SHRINKAGE_K} — evita ratings extremos
-            - **Decay** λ={DECAY_RATE} — pondera forma reciente
-            - **Edge máx.** {int(MAX_EDGE*100)}pp — filtro de credibilidad
-            """)
         if st.button("🔄 Actualizar datos", use_container_width=True):
             st.cache_data.clear(); st.rerun()
 
@@ -620,7 +900,7 @@ def main():
 
     ratings, avg_h, avg_a = build_ratings(season_df)
 
-    # ── Metrics bar (custom cards) ───────────────────────────
+    # ── Metrics bar ──────────────────────────────────────────
     mc = st.columns(5)
     for col, num, label in zip(mc, [
         len(season_df), len(ratings), len(upcoming),
@@ -649,14 +929,32 @@ def main():
         hctx  = get_team_context(m["home_id"], standings_df, lc, md, td)
         actx  = get_team_context(m["away_id"], standings_df, lc, md, td)
         alerts= match_alerts(hctx, actx, md, lc)
+        # Form for card display
+        hform = team_form(season_df, m["home_id"], 3)
+        aform = team_form(season_df, m["away_id"], 3)
         vbets = detect_value_bets(p, bk, m["home_name"], m["away_name"], ev_threshold)
         for vb in vbets:
-            vb.update({"date":m["date"],"matchday":md,
-                       "home_ctx":hctx,"away_ctx":actx,"ctx_alerts":alerts})
+            vb.update({
+                "date":     m["date"],
+                "matchday": md,
+                "home_ctx": hctx,
+                "away_ctx": actx,
+                "ctx_alerts": alerts,
+                # Extra data for analysis + card precision
+                "home_id":   m["home_id"],
+                "away_id":   m["away_id"],
+                "probs":     p,
+                "home_form": hform,
+                "away_form": aform,
+            })
             all_vb.append(vb)
-        match_map[m["id"]] = {"p":p,"bk":bk,"vbets":vbets,"hctx":hctx,"actx":actx,"alerts":alerts,"md":md}
+        match_map[m["id"]] = {"p":p,"bk":bk,"vbets":vbets,"hctx":hctx,"actx":actx,
+                               "alerts":alerts,"md":md,"hform":hform,"aform":aform}
 
     all_vb.sort(key=lambda x: x["ev"], reverse=True)
+
+    # ── Sidebar – Part 2: Summary card (post pre-compute) ─
+    render_sidebar_summary(all_vb, lc, ev_min_pct)
 
     # ── Tabs ─────────────────────────────────────────────────
     t1, t2, t3, t4 = st.tabs(["🎯 Value Bets","🗓️ Partidos","🔍 Equipo","📋 Clasificación"])
@@ -683,8 +981,13 @@ def main():
 
             st.markdown("<div style='margin-top:1.2rem'></div>", unsafe_allow_html=True)
 
-            for vb in filtered:
-                st.markdown(vb_card_html(vb), unsafe_allow_html=True)
+            for idx, vb in enumerate(filtered):
+                # Animated card
+                st.markdown(vb_card_html(vb, idx), unsafe_allow_html=True)
+                # Expandable analysis
+                with st.expander("📊 ¿Por qué este pick?", expanded=False):
+                    analysis = generate_analysis(vb, ratings)
+                    st.markdown(analysis)
 
             st.markdown("---")
             df_vb = pd.DataFrame(filtered)
