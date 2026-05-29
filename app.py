@@ -5,40 +5,37 @@ import pandas as pd
 from scipy.stats import poisson
 from difflib import SequenceMatcher
 from datetime import datetime, timedelta
-import warnings
+import warnings, json, os, uuid, calendar as cal_module
 warnings.filterwarnings("ignore")
 
 # ═══════════════════════════════════════════════════════════
 # PAGE CONFIG
 # ═══════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="Statitum · Value Bets",
-    page_icon="📊",
+    page_title="STATIUM · Sports Intelligence",
+    page_icon="🏟️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ── Design System ────────────────────────────────────────────
-BRAND_GREEN  = "#00c896"
-BRAND_BLUE   = "#3b82f6"
-BRAND_PURPLE = "#6366f1"
-BRAND_GOLD   = "#f59e0b"
+# ── Design System — STATIUM Brand Manual ─────────────────────
+BRAND_GREEN   = "#00A86B"   # Signal Green
+BRAND_DARK    = "#0A0D12"   # Carbon Black
+BRAND_GRAPHITE= "#171B22"   # Deep Graphite
+BRAND_STEEL   = "#3A404A"   # Steel Gray
+BRAND_BLUE    = "#1a6fa8"   # Data Blue (away / secondary)
+BRAND_AMBER   = "#d97706"   # Warning / low confidence
 
+# Logo SVG — STATIUM icon: stadium ring + brand triangle
 LOGO_SVG = """
 <svg width="52" height="52" viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="lg1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00c896"/>
-      <stop offset="100%" stop-color="#3b82f6"/>
-    </linearGradient>
-  </defs>
-  <rect width="52" height="52" rx="14" fill="url(#lg1)"/>
-  <rect x="9"  y="32" width="7" height="11" rx="2" fill="white" opacity="0.55"/>
-  <rect x="19" y="23" width="7" height="20" rx="2" fill="white" opacity="0.75"/>
-  <rect x="29" y="15" width="7" height="28" rx="2" fill="white"/>
-  <polyline points="12,36 22,27 32,19 39,13" stroke="white" stroke-width="1.5"
-            fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
-  <circle cx="39" cy="13" r="3.5" fill="white"/>
+  <rect width="52" height="52" rx="13" fill="#0A0D12"/>
+  <ellipse cx="26" cy="22" rx="15" ry="7.5" fill="none" stroke="#00A86B" stroke-width="2"/>
+  <line x1="11" y1="22" x2="11" y2="30" stroke="#00A86B" stroke-width="2" stroke-linecap="round"/>
+  <line x1="41" y1="22" x2="41" y2="30" stroke="#00A86B" stroke-width="2" stroke-linecap="round"/>
+  <path d="M11,30 Q11,41 26,41 Q41,41 41,30" fill="none" stroke="#00A86B" stroke-width="2"/>
+  <ellipse cx="26" cy="22" rx="7" ry="3.5" fill="none" stroke="#00A86B" stroke-width="1" opacity="0.45"/>
+  <polygon points="26,8 22.5,15 29.5,15" fill="#00A86B"/>
 </svg>
 """
 
@@ -49,8 +46,11 @@ def logo_img(size=52):
 
 st.markdown(f"""
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
   /* ── Reset & Base ── */
   .block-container {{ padding-top: 1.2rem; max-width: 1200px; }}
+  html, body, [class*="css"] {{ font-family: 'Space Grotesk', sans-serif !important; }}
 
   /* ── Header ── */
   .stat-header {{
@@ -59,17 +59,22 @@ st.markdown(f"""
   }}
   .stat-logo {{ flex-shrink: 0; }}
   .stat-title {{
-    font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;
-    background: linear-gradient(135deg, {BRAND_GREEN}, {BRAND_BLUE});
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    font-size: 2.2rem; font-weight: 800; letter-spacing: 2px;
+    color: {BRAND_DARK};
+    font-family: 'Space Grotesk', sans-serif;
     line-height: 1.1;
   }}
-  .stat-subtitle {{ color: #64748b; font-size: 0.88rem; margin-top: 2px; }}
+  .stat-tagline {{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.70rem; font-weight: 500; letter-spacing: 1.5px;
+    color: {BRAND_GREEN}; text-transform: uppercase; margin-top: 3px;
+  }}
+  .stat-subtitle {{ color: #64748b; font-size: 0.82rem; margin-top: 1px; }}
 
   /* ── Gradient separator ── */
   .grad-line {{
     height: 2px; border-radius: 2px;
-    background: linear-gradient(90deg, {BRAND_GREEN}, {BRAND_BLUE}, {BRAND_PURPLE}, transparent);
+    background: linear-gradient(90deg, {BRAND_GREEN}, {BRAND_DARK}, transparent);
     margin: 10px 0 18px 0;
   }}
 
@@ -80,8 +85,8 @@ st.markdown(f"""
     border-top: 3px solid {BRAND_GREEN};
     text-align: center;
   }}
-  .stat-card-num  {{ font-size: 1.8rem; font-weight: 800; color: #0f172a; }}
-  .stat-card-label{{ font-size: 0.75rem; color: #64748b; margin-top: 2px; }}
+  .stat-card-num  {{ font-size: 1.8rem; font-weight: 800; color: {BRAND_DARK}; font-family: 'IBM Plex Mono', monospace; }}
+  .stat-card-label{{ font-size: 0.72rem; color: #64748b; margin-top: 2px; letter-spacing: .3px; }}
 
   /* ── Value Bet Cards ── */
   @keyframes slideInUp {{
@@ -92,54 +97,56 @@ st.markdown(f"""
   .vb-card {{
     background: white; border-radius: 16px; padding: 20px 22px;
     margin-bottom: 14px; position: relative; overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
     border: 1px solid #e2e8f0;
     transition: transform 0.15s, box-shadow 0.15s;
     animation: slideInUp 0.45s ease-out both;
   }}
-  .vb-card:hover {{ transform: translateY(-2px); box-shadow: 0 10px 32px rgba(0,0,0,0.11); }}
-  .vb-card-high   {{ border-left: 5px solid #10b981; box-shadow: 0 4px 20px rgba(16,185,129,0.12); }}
-  .vb-card-medium {{ border-left: 5px solid {BRAND_GOLD}; box-shadow: 0 4px 20px rgba(245,158,11,0.10); }}
-  .vb-card-low    {{ border-left: 5px solid #f97316; box-shadow: 0 4px 20px rgba(249,115,22,0.08); }}
+  .vb-card:hover {{ transform: translateY(-2px); box-shadow: 0 10px 32px rgba(0,0,0,0.10); }}
+  .vb-card-high   {{ border-left: 4px solid {BRAND_GREEN}; box-shadow: 0 4px 20px rgba(0,168,107,0.10); }}
+  .vb-card-medium {{ border-left: 4px solid {BRAND_STEEL}; box-shadow: 0 4px 20px rgba(58,64,74,0.08); }}
+  .vb-card-low    {{ border-left: 4px solid {BRAND_AMBER}; box-shadow: 0 4px 20px rgba(217,119,6,0.08); }}
 
-  .vb-match   {{ font-size: 1.05rem; font-weight: 700; color: #0f172a; margin: 0; }}
-  .vb-meta    {{ font-size: 0.78rem; color: #64748b; margin-top: 3px; }}
+  .vb-match   {{ font-size: 1.05rem; font-weight: 700; color: {BRAND_DARK}; margin: 0; font-family: 'Space Grotesk', sans-serif; }}
+  .vb-meta    {{ font-size: 0.77rem; color: #64748b; margin-top: 3px; font-family: 'IBM Plex Mono', monospace; }}
   .vb-ctx-row {{ display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; }}
 
-  /* ── EV Badge ── */
+  /* ── EV Badge — premium, not casino ── */
   .ev-pill {{
     display: inline-flex; align-items: center; gap: 5px;
-    font-size: 1.25rem; font-weight: 800;
-    padding: 6px 16px; border-radius: 30px;
+    font-size: 1.15rem; font-weight: 700;
+    padding: 5px 14px; border-radius: 8px;
+    font-family: 'IBM Plex Mono', monospace; letter-spacing: .5px;
   }}
-  .ev-high   {{ background: linear-gradient(135deg,#d1fae5,#a7f3d0); color: #065f46; }}
-  .ev-medium {{ background: linear-gradient(135deg,#fef3c7,#fde68a); color: #78350f; }}
-  .ev-low    {{ background: linear-gradient(135deg,#ffedd5,#fed7aa); color: #7c2d12; }}
+  .ev-high   {{ background: rgba(0,168,107,0.10); color: {BRAND_GREEN}; border: 1px solid rgba(0,168,107,0.28); }}
+  .ev-medium {{ background: rgba(58,64,74,0.07);  color: {BRAND_STEEL}; border: 1px solid rgba(58,64,74,0.22); }}
+  .ev-low    {{ background: rgba(217,119,6,0.09); color: {BRAND_AMBER}; border: 1px solid rgba(217,119,6,0.25); }}
 
   .conf-tag {{
-    font-size: 0.75rem; font-weight: 600; padding: 3px 10px;
-    border-radius: 20px; display: inline-block;
+    font-size: 0.70rem; font-weight: 600; padding: 2px 9px;
+    border-radius: 6px; display: inline-block;
+    font-family: 'IBM Plex Mono', monospace; letter-spacing: .3px;
   }}
-  .conf-high   {{ background: #d1fae5; color: #065f46; }}
-  .conf-medium {{ background: #fef3c7; color: #78350f; }}
-  .conf-low    {{ background: #ffedd5; color: #7c2d12; }}
+  .conf-high   {{ background: rgba(0,168,107,0.09); color: {BRAND_GREEN}; border: 1px solid rgba(0,168,107,0.25); }}
+  .conf-medium {{ background: rgba(58,64,74,0.07);  color: {BRAND_STEEL}; border: 1px solid rgba(58,64,74,0.20); }}
+  .conf-low    {{ background: rgba(217,119,6,0.09); color: {BRAND_AMBER}; border: 1px solid rgba(217,119,6,0.22); }}
 
   .vb-details {{
     font-size: 0.82rem; color: #475569; margin-top: 10px;
-    display: flex; flex-wrap: wrap; gap: 12px;
+    display: flex; flex-wrap: wrap; gap: 14px;
   }}
   .vb-detail-item {{ display: flex; flex-direction: column; }}
-  .vb-detail-label {{ font-size: 0.68rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; }}
-  .vb-detail-val   {{ font-weight: 700; color: #0f172a; font-size: 0.92rem; }}
-  .vb-detail-val.green {{ color: #059669; }}
-  .vb-detail-val.blue  {{ color: #3b82f6; }}
+  .vb-detail-label {{ font-size: 0.63rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .6px; font-family: 'IBM Plex Mono', monospace; }}
+  .vb-detail-val   {{ font-weight: 600; color: {BRAND_DARK}; font-size: 0.90rem; font-family: 'IBM Plex Mono', monospace; }}
+  .vb-detail-val.green {{ color: {BRAND_GREEN}; }}
+  .vb-detail-val.blue  {{ color: {BRAND_STEEL}; }}
 
   /* ── Context badges ── */
-  .ctx-badge  {{ display:inline-block; font-size:.72rem; font-weight:600; padding:2px 9px; border-radius:12px; }}
+  .ctx-badge  {{ display:inline-block; font-size:.70rem; font-weight:600; padding:2px 9px; border-radius:6px; font-family:'Space Grotesk',sans-serif; }}
   .ctx-title      {{ background:#fef9c3; color:#854d0e; border:1px solid #fde047; }}
   .ctx-champion   {{ background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }}
-  .ctx-champ-won  {{ background:#f0fdf4; color:#166534; border:1px solid #86efac; }}
-  .ctx-europa     {{ background:#f0fdf4; color:#166534; border:1px solid #86efac; }}
+  .ctx-champ-won  {{ background:rgba(0,168,107,0.10); color:{BRAND_GREEN}; border:1px solid rgba(0,168,107,0.28); }}
+  .ctx-europa     {{ background:rgba(0,168,107,0.08); color:{BRAND_GREEN}; border:1px solid rgba(0,168,107,0.22); }}
   .ctx-mid        {{ background:#f8fafc; color:#64748b; border:1px solid #e2e8f0; }}
   .ctx-dead       {{ background:#f8fafc; color:#94a3b8; border:1px solid #e2e8f0; font-style:italic; }}
   .ctx-nearrel    {{ background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }}
@@ -147,54 +154,56 @@ st.markdown(f"""
 
   /* ── Context alert ── */
   .ctx-alert {{
-    background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px;
-    padding: 7px 12px; font-size: .80rem; color: #92400e; margin-top: 8px;
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
+    padding: 6px 12px; font-size: .78rem; color: #92400e; margin-top: 8px;
+    font-family: 'Space Grotesk', sans-serif;
   }}
 
   /* ── Compact prob bar (inside card) ── */
   .card-prob-bar {{
-    display:flex; height:22px; border-radius:6px; overflow:hidden; gap:1px;
-    margin: 10px 0 4px;
+    display:flex; height:20px; border-radius:4px; overflow:hidden; gap:1px;
+    margin: 8px 0 4px;
   }}
-  .cpb-home {{ background:linear-gradient(135deg,#10b981,#34d399); display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:700; min-width:28px; }}
-  .cpb-draw {{ background:linear-gradient(135deg,#94a3b8,#cbd5e1); display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:700; min-width:28px; }}
-  .cpb-away {{ background:linear-gradient(135deg,#3b82f6,#60a5fa); display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:700; min-width:28px; }}
+  .cpb-home {{ background:{BRAND_GREEN}; display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:600; min-width:28px; font-family:'IBM Plex Mono',monospace; }}
+  .cpb-draw {{ background:{BRAND_STEEL}; display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:600; min-width:28px; font-family:'IBM Plex Mono',monospace; }}
+  .cpb-away {{ background:{BRAND_BLUE};  display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:600; min-width:28px; font-family:'IBM Plex Mono',monospace; }}
 
   /* ── Full probability bars (Tab 2) ── */
   .prob-bar-wrap {{ margin: 14px 0 4px; }}
-  .prob-bar-label {{ font-size: .70rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; }}
-  .prob-bar-1x2 {{ display:flex; height:28px; border-radius:8px; overflow:hidden; gap:1px; }}
-  .pb-home {{ background: linear-gradient(135deg,#10b981,#34d399); display:flex; align-items:center; justify-content:center; color:white; font-size:11px; font-weight:700; min-width:30px; }}
-  .pb-draw {{ background: linear-gradient(135deg,#94a3b8,#cbd5e1); display:flex; align-items:center; justify-content:center; color:white; font-size:11px; font-weight:700; min-width:30px; }}
-  .pb-away {{ background: linear-gradient(135deg,#3b82f6,#60a5fa); display:flex; align-items:center; justify-content:center; color:white; font-size:11px; font-weight:700; min-width:30px; }}
+  .prob-bar-label {{ font-size: .68rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 5px; font-family:'IBM Plex Mono',monospace; }}
+  .prob-bar-1x2 {{ display:flex; height:26px; border-radius:6px; overflow:hidden; gap:1px; }}
+  .pb-home {{ background:{BRAND_GREEN}; display:flex; align-items:center; justify-content:center; color:white; font-size:11px; font-weight:600; min-width:30px; font-family:'IBM Plex Mono',monospace; }}
+  .pb-draw {{ background:{BRAND_STEEL}; display:flex; align-items:center; justify-content:center; color:white; font-size:11px; font-weight:600; min-width:30px; font-family:'IBM Plex Mono',monospace; }}
+  .pb-away {{ background:{BRAND_BLUE};  display:flex; align-items:center; justify-content:center; color:white; font-size:11px; font-weight:600; min-width:30px; font-family:'IBM Plex Mono',monospace; }}
 
   .prob-pills {{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }}
   .prob-pill {{
-    display:flex; align-items:center; gap:5px; padding:4px 10px;
-    background:#f8fafc; border-radius:20px; font-size:.78rem;
-    border:1px solid #e2e8f0;
+    display:flex; align-items:center; gap:5px; padding:3px 10px;
+    background:#f8fafc; border-radius:6px; font-size:.76rem;
+    border:1px solid #e2e8f0; font-family:'IBM Plex Mono',monospace;
   }}
-  .prob-pill-dot {{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }}
-  .pp-green  {{ background:#10b981; }}
-  .pp-blue   {{ background:#3b82f6; }}
+  .prob-pill-dot {{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }}
+  .pp-green  {{ background:{BRAND_GREEN}; }}
+  .pp-blue   {{ background:{BRAND_STEEL}; }}
   .pp-orange {{ background:#f97316; }}
-  .pp-purple {{ background:#8b5cf6; }}
-  .prob-pill-val {{ font-weight:700; color:#0f172a; }}
+  .pp-purple {{ background:{BRAND_BLUE}; }}
+  .prob-pill-val {{ font-weight:600; color:{BRAND_DARK}; }}
 
   /* ── Form badges ── */
-  .form-badge {{ display:inline-block; width:26px; height:26px; border-radius:6px; text-align:center; line-height:26px; font-size:12px; font-weight:700; color:white; margin:1px; }}
-  .fb-w {{ background:#10b981; }}
-  .fb-d {{ background:#94a3b8; }}
+  .form-badge {{ display:inline-block; width:24px; height:24px; border-radius:4px; text-align:center; line-height:24px; font-size:11px; font-weight:700; color:white; margin:1px; font-family:'Space Grotesk',sans-serif; }}
+  .fb-w {{ background:{BRAND_GREEN}; }}
+  .fb-d {{ background:{BRAND_STEEL}; }}
   .fb-l {{ background:#ef4444; }}
 
   /* ── Sidebar ── */
   [data-testid="stSidebar"] {{ background: white !important; }}
 
   /* ── Tabs ── */
-  [data-testid="stTabs"] button {{ font-weight:600; }}
+  [data-testid="stTabs"] button {{ font-weight:600; font-family:'Space Grotesk',sans-serif !important; }}
 
   /* ── Override Streamlit metric ── */
-  div[data-testid="stMetricValue"] {{ font-size:1.5rem !important; font-weight:800 !important; }}
+  div[data-testid="stMetricValue"] {{ font-size:1.5rem !important; font-weight:700 !important; font-family:'IBM Plex Mono',monospace !important; }}
+  div[data-testid="stMetricLabel"]  {{ font-size:.72rem !important; font-family:'Space Grotesk',sans-serif !important; }}
 
   .footer {{
     text-align:center; color:#94a3b8; font-size:.73rem;
@@ -224,6 +233,8 @@ MAX_EDGE     = 0.17
 SHRINKAGE_K  = 10
 DECAY_RATE   = 0.010
 LATE_SEASON  = 5
+
+HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "picks_history.json")
 
 # ═══════════════════════════════════════════════════════════
 # API
@@ -491,6 +502,187 @@ def detect_value_bets(probs, bk, home_name, away_name, ev_threshold):
                       "ev_css":ev_css,"conf_css":conf_css,
                       "home":home_name,"away":away_name})
     return found
+
+# ═══════════════════════════════════════════════════════════
+# TRACKER — PERSISTENCIA Y ESTADÍSTICAS
+# ═══════════════════════════════════════════════════════════
+def load_history():
+    if not os.path.exists(HISTORY_FILE): return []
+    try:
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f: return json.load(f)
+    except Exception: return []
+
+def _save_history(history):
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(history, f, indent=2, ensure_ascii=False)
+
+def add_pick_to_history(home, away, league, market, odds, model_p, ev, stake, date_match):
+    history = load_history()
+    pick = {
+        "id":         str(uuid.uuid4())[:8],
+        "created_at": datetime.utcnow().isoformat(),
+        "date_match": date_match,
+        "home": home, "away": away,
+        "league": league, "market": market,
+        "odds":    round(float(odds), 2),
+        "model_p": round(float(model_p)*100, 1),
+        "ev":      round(float(ev)*100, 1),
+        "stake":   round(float(stake), 2) if stake else 0.0,
+        "result":  "pending",
+        "resolved_at": None, "pnl": None,
+    }
+    history.append(pick)
+    _save_history(history)
+    return pick["id"]
+
+def resolve_pick(pick_id, result, stake=None):
+    history = load_history()
+    for p in history:
+        if p["id"] == pick_id:
+            p["result"] = result
+            p["resolved_at"] = datetime.utcnow().isoformat()
+            if stake is not None: p["stake"] = round(float(stake), 2)
+            if result == "hit":   p["pnl"] = round(p["stake"] * (p["odds"] - 1), 2)
+            elif result == "miss": p["pnl"] = -p["stake"]
+            else:                  p["pnl"] = 0.0
+            break
+    _save_history(history)
+
+def delete_pick(pick_id):
+    history = [p for p in load_history() if p["id"] != pick_id]
+    _save_history(history)
+
+def get_streak(history):
+    resolved = sorted(
+        [p for p in history if p["result"] in ("hit","miss")],
+        key=lambda x: x.get("resolved_at") or "", reverse=True
+    )
+    if not resolved: return 0, None
+    kind = resolved[0]["result"]
+    count = sum(1 for p in resolved if p["result"] == kind)
+    # Only consecutive from latest
+    streak = 0
+    for p in resolved:
+        if p["result"] == kind: streak += 1
+        else: break
+    return streak, kind
+
+def get_stats(history):
+    resolved = [p for p in history if p["result"] in ("hit","miss")]
+    if not resolved:
+        return {"total":0,"hits":0,"misses":0,"win_rate":0.0,"roi":0.0,"pnl":0.0,"staked":0.0}
+    hits    = sum(1 for p in resolved if p["result"]=="hit")
+    pnl     = sum(p.get("pnl") or 0 for p in resolved)
+    staked  = sum(p.get("stake") or 0 for p in resolved)
+    return {
+        "total":    len(resolved),
+        "hits":     hits,
+        "misses":   len(resolved)-hits,
+        "win_rate": round(hits/len(resolved)*100, 1),
+        "roi":      round(pnl/staked*100, 1) if staked > 0 else 0.0,
+        "pnl":      round(pnl, 2),
+        "staked":   round(staked, 2),
+    }
+
+def streak_html(streak_count, streak_type):
+    if streak_count == 0 or streak_type is None:
+        return (
+            '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px;text-align:center">'
+            '<div style="font-size:.65rem;letter-spacing:1px;color:#94a3b8;font-family:\'IBM Plex Mono\',monospace;margin-bottom:6px">RACHA ACTIVA</div>'
+            '<div style="font-size:1.8rem;color:#94a3b8">—</div>'
+            '<div style="font-size:.72rem;color:#94a3b8;margin-top:4px">Sin historial resuelto</div>'
+            '</div>'
+        )
+    is_hit  = streak_type == "hit"
+    icon    = "🔥" if is_hit else "🧊"
+    label   = "HITS CONSECUTIVOS" if is_hit else "MISSES CONSECUTIVOS"
+    color   = BRAND_GREEN if is_hit else "#ef4444"
+    bg      = "rgba(0,168,107,0.07)" if is_hit else "rgba(239,68,68,0.07)"
+    border  = "rgba(0,168,107,0.25)" if is_hit else "rgba(239,68,68,0.25)"
+    icons   = "".join(f'<span style="font-size:1.3rem;opacity:{max(0.25,1-i*0.14)}">{icon}</span>' for i in range(min(streak_count, 6)))
+    return (
+        f'<div style="background:{bg};border:1px solid {border};border-radius:12px;padding:18px;text-align:center">'
+        f'<div style="font-size:.63rem;letter-spacing:1.2px;color:{color};font-family:\'IBM Plex Mono\',monospace;margin-bottom:6px">{label}</div>'
+        f'<div style="font-size:3rem;font-weight:700;color:{BRAND_DARK};font-family:\'IBM Plex Mono\',monospace;line-height:1">{streak_count}</div>'
+        f'<div style="margin-top:8px">{icons}</div>'
+        f'</div>'
+    )
+
+def calendar_html_grid(history, year, month):
+    picks_by_date = {}
+    for p in history:
+        raw = p.get("resolved_at") or p.get("created_at") or ""
+        date_str = raw[:10]
+        if date_str: picks_by_date.setdefault(date_str, []).append(p)
+
+    month_name = cal_module.month_name[month].upper()
+    matrix     = cal_module.monthcalendar(year, month)
+    today_str  = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # Day headers
+    hdr = "".join(
+        f'<div style="text-align:center;font-size:.62rem;color:#94a3b8;font-family:\'IBM Plex Mono\',monospace;padding-bottom:4px">{d}</div>'
+        for d in ["L","M","X","J","V","S","D"]
+    )
+
+    cells = ""
+    for week in matrix:
+        for day in week:
+            if day == 0:
+                cells += '<div></div>'; continue
+            ds = f"{year}-{month:02d}-{day:02d}"
+            dp = picks_by_date.get(ds, [])
+            is_today = ds == today_str
+
+            if not dp:
+                bg, border_c = "#f8fafc", "#e2e8f0"
+                dot = ""
+            else:
+                hits    = sum(1 for p in dp if p["result"]=="hit")
+                misses  = sum(1 for p in dp if p["result"]=="miss")
+                pending = sum(1 for p in dp if p["result"]=="pending")
+                n       = len(dp)
+                if hits and not misses:
+                    bg, border_c = "rgba(0,168,107,0.13)", "rgba(0,168,107,0.35)"
+                elif misses and not hits:
+                    bg, border_c = "rgba(239,68,68,0.11)", "rgba(239,68,68,0.30)"
+                elif hits and misses:
+                    bg, border_c = "rgba(217,119,6,0.11)", "rgba(217,119,6,0.30)"
+                else:
+                    bg, border_c = "rgba(26,111,168,0.09)", "rgba(26,111,168,0.25)"
+                dot = f'<div style="font-size:.58rem;color:#64748b;font-family:\'IBM Plex Mono\',monospace">{n}p</div>'
+
+            today_ring = "box-shadow:0 0 0 2px #00A86B;" if is_today else ""
+            cells += (
+                f'<div style="background:{bg};border:1px solid {border_c};border-radius:6px;'
+                f'padding:5px 2px;text-align:center;min-height:42px;{today_ring}">'
+                f'<div style="font-size:.72rem;font-weight:600;color:{BRAND_DARK};font-family:\'IBM Plex Mono\',monospace">{day}</div>'
+                f'{dot}</div>'
+            )
+
+    legend = (
+        '<div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">'
+        + "".join(
+            f'<div style="display:flex;align-items:center;gap:4px;font-size:.65rem;color:#64748b">'
+            f'<div style="width:9px;height:9px;border-radius:2px;background:{bg};border:1px solid {bc}"></div>{lbl}</div>'
+            for lbl,bg,bc in [
+                ("Hit","rgba(0,168,107,0.15)","rgba(0,168,107,0.35)"),
+                ("Miss","rgba(239,68,68,0.12)","rgba(239,68,68,0.30)"),
+                ("Mixto","rgba(217,119,6,0.12)","rgba(217,119,6,0.30)"),
+                ("Pendiente","rgba(26,111,168,0.10)","rgba(26,111,168,0.25)"),
+            ]
+        )
+        + '</div>'
+    )
+
+    return (
+        f'<div style="background:white;border-radius:14px;padding:18px 18px 14px;border:1px solid #e2e8f0;box-shadow:0 2px 12px rgba(0,0,0,0.05)">'
+        f'<div style="font-size:.72rem;font-weight:700;color:{BRAND_DARK};font-family:\'Space Grotesk\',sans-serif;letter-spacing:.5px;margin-bottom:12px">{month_name} {year}</div>'
+        f'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">{hdr}</div>'
+        f'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">{cells}</div>'
+        f'{legend}'
+        f'</div>'
+    )
 
 # ═══════════════════════════════════════════════════════════
 # ANÁLISIS DE PICK ("¿Por qué este pick?")
@@ -812,7 +1004,7 @@ def render_sidebar_summary(all_vb, lc, ev_min_pct):
             <span style="font-weight:700;color:#0f172a">{val_str}</span>
           </div>
           <div style="background:#f1f5f9;border-radius:4px;height:5px">
-            <div style="background:linear-gradient(90deg,#00c896,#3b82f6);width:{pct}%;height:100%;border-radius:4px"></div>
+            <div style="background:linear-gradient(90deg,#00A86B,#0A0D12);width:{pct}%;height:100%;border-radius:4px"></div>
           </div>
         </div>"""
 
@@ -824,22 +1016,22 @@ def render_sidebar_summary(all_vb, lc, ev_min_pct):
     with st.sidebar:
         # ── Summary card ──
         st.markdown(f"""
-        <div style="background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:16px;padding:18px;margin:4px 0 16px">
-          <div style="color:#64748b;font-size:.68rem;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Picks detectados</div>
-          <div style="font-size:2.4rem;font-weight:800;color:white;line-height:1">{n_total}</div>
-          <div style="color:#475569;font-size:.72rem;margin-bottom:14px">value bets · EV medio +{avg_ev}%</div>
+        <div style="background:linear-gradient(135deg,#0A0D12,#171B22);border-radius:14px;padding:18px;margin:4px 0 16px">
+          <div style="color:#3A404A;font-size:.66rem;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;font-family:'IBM Plex Mono',monospace">Picks detectados</div>
+          <div style="font-size:2.4rem;font-weight:700;color:white;line-height:1;font-family:'IBM Plex Mono',monospace">{n_total}</div>
+          <div style="color:#3A404A;font-size:.70rem;margin-bottom:14px;font-family:'IBM Plex Mono',monospace">value bets · EV medio +{avg_ev}%</div>
           <div style="display:flex;gap:8px">
-            <div style="flex:1;background:rgba(16,185,129,0.18);border-radius:10px;padding:8px 6px;text-align:center;border:1px solid rgba(16,185,129,0.25)">
-              <div style="color:#34d399;font-size:1.3rem;font-weight:800">{n_high}</div>
-              <div style="color:#6ee7b7;font-size:.63rem;margin-top:1px">🟢 Alta</div>
+            <div style="flex:1;background:rgba(0,168,107,0.15);border-radius:8px;padding:8px 6px;text-align:center;border:1px solid rgba(0,168,107,0.28)">
+              <div style="color:#00A86B;font-size:1.3rem;font-weight:700;font-family:'IBM Plex Mono',monospace">{n_high}</div>
+              <div style="color:#00A86B;font-size:.62rem;margin-top:1px;opacity:.75">Alta</div>
             </div>
-            <div style="flex:1;background:rgba(245,158,11,0.18);border-radius:10px;padding:8px 6px;text-align:center;border:1px solid rgba(245,158,11,0.25)">
-              <div style="color:#fcd34d;font-size:1.3rem;font-weight:800">{n_medium}</div>
-              <div style="color:#fde68a;font-size:.63rem;margin-top:1px">🟡 Media</div>
+            <div style="flex:1;background:rgba(58,64,74,0.20);border-radius:8px;padding:8px 6px;text-align:center;border:1px solid rgba(58,64,74,0.35)">
+              <div style="color:#a0aec0;font-size:1.3rem;font-weight:700;font-family:'IBM Plex Mono',monospace">{n_medium}</div>
+              <div style="color:#a0aec0;font-size:.62rem;margin-top:1px;opacity:.75">Media</div>
             </div>
-            <div style="flex:1;background:rgba(249,115,22,0.18);border-radius:10px;padding:8px 6px;text-align:center;border:1px solid rgba(249,115,22,0.25)">
-              <div style="color:#fb923c;font-size:1.3rem;font-weight:800">{n_low}</div>
-              <div style="color:#fed7aa;font-size:.63rem;margin-top:1px">🟠 Baja</div>
+            <div style="flex:1;background:rgba(217,119,6,0.14);border-radius:8px;padding:8px 6px;text-align:center;border:1px solid rgba(217,119,6,0.28)">
+              <div style="color:#d97706;font-size:1.3rem;font-weight:700;font-family:'IBM Plex Mono',monospace">{n_low}</div>
+              <div style="color:#d97706;font-size:.62rem;margin-top:1px;opacity:.75">Baja</div>
             </div>
           </div>
         </div>
@@ -870,8 +1062,9 @@ def main():
     <div class="stat-header">
       <div class="stat-logo">{logo_img(56)}</div>
       <div>
-        <div class="stat-title">STATITUM</div>
-        <div class="stat-subtitle">Análisis estadístico deportivo · Detección de value bets con EV real</div>
+        <div class="stat-title">STATIUM</div>
+        <div class="stat-tagline">Sports Intelligence. Predict The Edge.</div>
+        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo</div>
       </div>
     </div>
     <div class="grad-line"></div>
@@ -890,7 +1083,7 @@ def main():
         st.markdown(f"""
         <div style="display:flex;align-items:center;gap:10px;padding:8px 0 14px">
           {logo_img(40)}
-          <span style="font-weight:800;font-size:1.1rem;background:linear-gradient(135deg,#00c896,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">STATITUM</span>
+          <span style="font-weight:800;font-size:1.05rem;letter-spacing:2px;color:#0A0D12;font-family:'Space Grotesk',sans-serif">STATIUM</span>
         </div>
         """, unsafe_allow_html=True)
         st.divider()
@@ -973,7 +1166,7 @@ def main():
     render_sidebar_summary(all_vb, lc, ev_min_pct)
 
     # ── Tabs ─────────────────────────────────────────────────
-    t1, t2, t3, t4 = st.tabs(["🎯 Value Bets","🗓️ Partidos","🔍 Equipo","📋 Clasificación"])
+    t1, t2, t3, t4, t5 = st.tabs(["🎯 Value Bets","🗓️ Partidos","🔍 Equipo","📋 Clasificación","📈 Tracker"])
 
     # ─── TAB 1: VALUE BETS ────────────────────────────────────
     with t1:
@@ -991,9 +1184,9 @@ def main():
             st.info("No se detectaron value bets con estos criterios. Prueba bajando el EV mínimo.")
         else:
             col_badge1, col_badge2, col_badge3 = st.columns(3)
-            col_badge1.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:#10b981'>{sum(1 for v in filtered if v['conf_key']=='high')}</div><div class='stat-card-label'>🟢 Alta confianza</div></div>", unsafe_allow_html=True)
-            col_badge2.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{BRAND_GOLD}'>{sum(1 for v in filtered if v['conf_key']=='medium')}</div><div class='stat-card-label'>🟡 Media confianza</div></div>", unsafe_allow_html=True)
-            col_badge3.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:#f97316'>{sum(1 for v in filtered if v['conf_key']=='low')}</div><div class='stat-card-label'>🟠 Baja confianza</div></div>", unsafe_allow_html=True)
+            col_badge1.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{BRAND_GREEN}'>{sum(1 for v in filtered if v['conf_key']=='high')}</div><div class='stat-card-label'>Alta confianza</div></div>", unsafe_allow_html=True)
+            col_badge2.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{BRAND_STEEL}'>{sum(1 for v in filtered if v['conf_key']=='medium')}</div><div class='stat-card-label'>Media confianza</div></div>", unsafe_allow_html=True)
+            col_badge3.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{BRAND_AMBER}'>{sum(1 for v in filtered if v['conf_key']=='low')}</div><div class='stat-card-label'>Baja confianza</div></div>", unsafe_allow_html=True)
 
             st.markdown("<div style='margin-top:1.2rem'></div>", unsafe_allow_html=True)
 
@@ -1128,9 +1321,148 @@ def main():
                 [["Pos","Equipo","PJ","Pts","GF","GC","DG","Situación"]],
                 use_container_width=True, hide_index=True)
 
+    # ─── TAB 5: TRACKER ──────────────────────────────────────
+    with t5:
+        st.markdown("### 📈 Tracker · Racha & Historial")
+        history = load_history()
+        streak_count, streak_type = get_streak(history)
+        stats = get_stats(history)
+        pending_picks = [p for p in history if p["result"] == "pending"]
+        resolved_picks = sorted(
+            [p for p in history if p["result"] in ("hit","miss")],
+            key=lambda x: x.get("resolved_at") or "", reverse=True
+        )
+
+        # ── Stats row ──────────────────────────────────────
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        streak_color = BRAND_GREEN if streak_type == "hit" else ("#ef4444" if streak_type == "miss" else "#94a3b8")
+        sc1.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{streak_color}'>{streak_count}</div><div class='stat-card-label'>Racha activa</div></div>", unsafe_allow_html=True)
+        sc2.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{BRAND_GREEN}'>{stats['win_rate']}%</div><div class='stat-card-label'>Win rate · {stats['hits']}H / {stats['misses']}M</div></div>", unsafe_allow_html=True)
+        roi_color = BRAND_GREEN if stats['roi'] >= 0 else "#ef4444"
+        sc3.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{roi_color}'>{stats['roi']:+.1f}%</div><div class='stat-card-label'>ROI</div></div>", unsafe_allow_html=True)
+        pnl_color = BRAND_GREEN if stats['pnl'] >= 0 else "#ef4444"
+        sc4.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{pnl_color}'>{stats['pnl']:+.2f}</div><div class='stat-card-label'>P&L · Apostado {stats['staked']:.2f}</div></div>", unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-top:1.2rem'></div>", unsafe_allow_html=True)
+
+        # ── Streak visual + Calendario ─────────────────────
+        col_streak, col_cal = st.columns([1, 2])
+
+        with col_streak:
+            st.markdown(streak_html(streak_count, streak_type), unsafe_allow_html=True)
+
+        with col_cal:
+            now = datetime.utcnow()
+            cal_month = st.selectbox(
+                "Mes",
+                options=[(now.year, now.month),
+                         (now.year, now.month-1) if now.month > 1 else (now.year-1, 12),
+                         (now.year, now.month-2) if now.month > 2 else (now.year-1, 14-now.month)],
+                format_func=lambda ym: f"{cal_module.month_name[ym[1]]} {ym[0]}",
+                label_visibility="collapsed",
+            )
+            st.markdown(calendar_html_grid(history, cal_month[0], cal_month[1]), unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ── Registrar pick ────────────────────────────────
+        with st.expander("➕ Registrar pick", expanded=(len(history)==0)):
+            # Opciones: picks activos detectados + manual
+            pick_options = {"✏️ Entrada manual": None}
+            for vb in all_vb:
+                key = f"🎯 {vb['home']} vs {vb['away']} · {vb['label']} @ {vb['bk_odds']}"
+                pick_options[key] = vb
+
+            with st.form("form_add_pick", clear_on_submit=True):
+                sel_label = st.selectbox("Pick", list(pick_options.keys()))
+                sel_vb    = pick_options[sel_label]
+
+                fc1, fc2 = st.columns(2)
+                home_val  = fc1.text_input("Local",   value=sel_vb["home"]  if sel_vb else "")
+                away_val  = fc2.text_input("Visitante", value=sel_vb["away"] if sel_vb else "")
+                fc3, fc4  = st.columns(2)
+                league_val = fc3.text_input("Liga", value=league_name)
+                market_val = fc4.selectbox("Mercado",
+                    ["1 Local","X Empate","2 Visitante","Over 2.5","Under 2.5"],
+                    index=["1 Local","X Empate","2 Visitante","Over 2.5","Under 2.5"].index(sel_vb["label"]) if sel_vb else 0)
+                fc5, fc6, fc7 = st.columns(3)
+                odds_val   = fc5.number_input("Cuota", min_value=1.01, max_value=20.0,
+                                              value=float(sel_vb["bk_odds"]) if sel_vb else 2.0, step=0.05)
+                stake_val  = fc6.number_input("Stake (u.)", min_value=0.0, value=10.0, step=1.0)
+                result_val = fc7.selectbox("Resultado", ["Pendiente","Hit ✅","Miss ❌"])
+                date_val   = st.date_input("Fecha del partido",
+                                           value=datetime.fromisoformat(sel_vb["date"].replace("Z","+00:00")).date() if sel_vb else datetime.utcnow().date())
+
+                submitted = st.form_submit_button("💾 Guardar pick", use_container_width=True)
+                if submitted:
+                    if not home_val or not away_val:
+                        st.error("Completa Local y Visitante.")
+                    else:
+                        result_map = {"Pendiente":"pending","Hit ✅":"hit","Miss ❌":"miss"}
+                        model_p_val = sel_vb["model_p"] if sel_vb else 0.5
+                        ev_val      = sel_vb["ev"]      if sel_vb else 0.0
+                        add_pick_to_history(
+                            home=home_val, away=away_val, league=league_val,
+                            market=market_val, odds=odds_val,
+                            model_p=model_p_val, ev=ev_val,
+                            stake=stake_val,
+                            date_match=date_val.isoformat(),
+                        )
+                        # If result already known, resolve immediately
+                        r = result_map[result_val]
+                        if r != "pending":
+                            new_hist = load_history()
+                            if new_hist:
+                                resolve_pick(new_hist[-1]["id"], r, stake_val)
+                        st.success(f"✅ Pick guardado: {home_val} vs {away_val} · {market_val} @ {odds_val}")
+                        st.rerun()
+
+        # ── Pendientes ────────────────────────────────────
+        if pending_picks:
+            st.markdown(f"#### ⏳ Pendientes de resolución ({len(pending_picks)})")
+            for p in sorted(pending_picks, key=lambda x: x.get("date_match",""), reverse=True):
+                with st.container():
+                    pc1, pc2, pc3, pc4 = st.columns([3,1,1,1])
+                    pc1.markdown(
+                        f"**{p['home']} vs {p['away']}**  \n"
+                        f"<span style='font-size:.75rem;color:#64748b;font-family:IBM Plex Mono'>"
+                        f"{p['market']} @ {p['odds']} · EV +{p['ev']}% · Stake {p['stake']}</span>",
+                        unsafe_allow_html=True
+                    )
+                    if pc2.button("✅ Hit",  key=f"hit_{p['id']}"):
+                        resolve_pick(p["id"], "hit",  p["stake"]); st.rerun()
+                    if pc3.button("❌ Miss", key=f"miss_{p['id']}"):
+                        resolve_pick(p["id"], "miss", p["stake"]); st.rerun()
+                    if pc4.button("🗑️",     key=f"del_{p['id']}"):
+                        delete_pick(p["id"]); st.rerun()
+            st.markdown("---")
+
+        # ── Historial resuelto ────────────────────────────
+        if resolved_picks:
+            st.markdown(f"#### 📋 Historial ({len(resolved_picks)} picks resueltos)")
+            df_hist = pd.DataFrame(resolved_picks)
+            df_hist["Resultado"] = df_hist["result"].map({"hit":"✅ Hit","miss":"❌ Miss"})
+            df_hist["P&L"]       = df_hist["pnl"].apply(lambda x: f"{x:+.2f}" if x is not None else "—")
+            df_hist["ROI pick"]  = df_hist.apply(
+                lambda r: f"{(r['pnl']/r['stake']*100):+.1f}%" if r.get('stake') and r['stake']>0 else "—", axis=1)
+            show_cols = ["home","away","league","market","odds","model_p","ev","stake","Resultado","P&L","ROI pick"]
+            rename    = {"home":"Local","away":"Visitante","league":"Liga","market":"Mercado",
+                         "odds":"Cuota","model_p":"P.Modelo%","ev":"EV%","stake":"Stake"}
+            st.dataframe(
+                df_hist[show_cols].rename(columns=rename),
+                use_container_width=True, hide_index=True
+            )
+            csv_hist = df_hist[show_cols].rename(columns=rename).to_csv(index=False)
+            st.download_button("📥 Exportar historial CSV", csv_hist,
+                               f"statium_historial_{datetime.now().strftime('%Y%m%d')}.csv",
+                               "text/csv", use_container_width=True)
+        elif not pending_picks:
+            st.info("Aún no hay picks registrados. Usa '➕ Registrar pick' para empezar a trackear.")
+
     st.markdown("""
     <div class="footer">
-      <b>STATITUM</b> · Poisson Calibrado · Shrinkage Bayesiano · Contexto Competitivo<br>
+      <b>STATIUM</b> · Sports Intelligence. Predict The Edge.<br>
+      Poisson Calibrado · Shrinkage Bayesiano · Contexto Competitivo<br>
       Datos: football-data.org · Cuotas: the-odds-api.com · Las probabilidades son estimaciones estadísticas.
     </div>""", unsafe_allow_html=True)
 
