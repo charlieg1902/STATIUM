@@ -399,6 +399,75 @@ def fetch_intl_matches(fd_key):
     df.reset_index(drop=True, inplace=True)
     return df
 
+def upcoming_from_odds(odds_list, season_df, days_ahead=60):
+    """
+    Para torneos sin fixtures en football-data.org todavía, construye la lista
+    de próximos partidos directamente desde los datos de cuotas.
+    Hace fuzzy-match de nombres de equipos contra el historial de partidos
+    para recuperar los IDs necesarios para el modelo.
+    """
+    if not odds_list or season_df.empty:
+        return []
+
+    # Mapa nombre → id desde el historial de selecciones
+    name_to_id: dict = {}
+    for _, row in season_df.iterrows():
+        name_to_id[row["home_name"].lower()] = (row["home_name"], row["home_id"])
+        name_to_id[row["away_name"].lower()] = (row["away_name"], row["away_id"])
+
+    def fuzzy_lookup(query):
+        """Devuelve (canonical_name, team_id) o (query, None) si no hay match."""
+        q = query.lower().strip()
+        if q in name_to_id:
+            return name_to_id[q]
+        # Fuzzy sobre todas las claves
+        best_score, best_key = 0, None
+        for key in name_to_id:
+            s = SequenceMatcher(None, q, key).ratio()
+            if s > best_score:
+                best_score, best_key = s, key
+        if best_score >= 0.72:
+            return name_to_id[best_key]
+        return query, None   # sin match — mostramos pero sin modelo
+
+    cutoff = (datetime.utcnow() + timedelta(days=days_ahead)).isoformat()
+    now_str = datetime.utcnow().isoformat()
+
+    upcoming = []
+    seen = set()
+    for om in odds_list:
+        ct = om.get("commence_time", "")
+        if not ct:
+            continue
+        # Filtrar por ventana de días
+        if ct < now_str or ct > cutoff:
+            continue
+        home_raw = om.get("home_team", "")
+        away_raw = om.get("away_team", "")
+        key = (home_raw, away_raw)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        h_name, h_id = fuzzy_lookup(home_raw)
+        a_name, a_id = fuzzy_lookup(away_raw)
+
+        upcoming.append({
+            "id":        om.get("id", ""),
+            "date":      ct if ct.endswith("Z") else ct + "Z",
+            "home_id":   h_id if h_id is not None else -hash(home_raw),
+            "home_name": h_name,
+            "away_id":   a_id if a_id is not None else -hash(away_raw),
+            "away_name": a_name,
+            "matchday":  0,
+            "_from_odds": True,   # bandera interna
+            "_h_matched": h_id is not None,
+            "_a_matched": a_id is not None,
+        })
+
+    upcoming.sort(key=lambda x: x["date"])
+    return upcoming
+
 @st.cache_data(ttl=7200, show_spinner=False)
 def fetch_odds(odds_key, sport_key):
     data = _odds_get(odds_key, f"/sports/{sport_key}/odds/",
@@ -864,6 +933,104 @@ def calendar_html_grid(history, year, month):
     )
 
 # ═══════════════════════════════════════════════════════════
+# CALENDARIO DE PARTIDOS — selector visual de fechas
+# ═══════════════════════════════════════════════════════════
+def match_dates_calendar_html(upcoming, selected_date_str=None):
+    """
+    Genera un calendario HTML compacto con los meses que tienen partidos.
+    Las fechas con partidos llevan un punto verde y fondo suave.
+    La fecha seleccionada queda en verde sólido.
+    """
+    if not upcoming:
+        return ""
+
+    match_counts: dict = {}
+    for m in upcoming:
+        d = m["date"][:10]
+        match_counts[d] = match_counts.get(d, 0) + 1
+
+    if not match_counts:
+        return ""
+
+    dates_sorted = sorted(match_counts)
+    today        = datetime.utcnow().date()
+
+    # Meses a mostrar (desde primer partido hasta último)
+    first_dt = datetime.strptime(dates_sorted[0],  "%Y-%m-%d").date().replace(day=1)
+    last_dt  = datetime.strptime(dates_sorted[-1], "%Y-%m-%d").date().replace(day=1)
+    months   = []
+    cur = first_dt
+    while cur <= last_dt:
+        months.append((cur.year, cur.month))
+        cur = (cur.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+    hdr_row = "".join(
+        f'<div style="text-align:center;font-size:.58rem;color:#94a3b8;'
+        f'font-family:IBM Plex Mono,monospace;padding-bottom:3px">{d}</div>'
+        for d in ["L","M","X","J","V","S","D"]
+    )
+
+    month_blocks = []
+    for year, month in months:
+        month_label = cal_module.month_name[month].upper()
+        matrix      = cal_module.monthcalendar(year, month)
+        cells       = ""
+        for week in matrix:
+            for day in week:
+                if day == 0:
+                    cells += '<div></div>'
+                    continue
+                ds        = f"{year}-{month:02d}-{day:02d}"
+                n         = match_counts.get(ds, 0)
+                is_today  = datetime.strptime(ds, "%Y-%m-%d").date() == today
+                is_sel    = ds == selected_date_str
+
+                if is_sel:
+                    bg = "#00A86B"; txt_c = "white"; border = ""
+                elif n:
+                    bg = "rgba(0,168,107,0.11)"; txt_c = "#0A0D12"
+                    border = "border:1.5px solid rgba(0,168,107,0.40);"
+                elif is_today:
+                    bg = "rgba(26,111,168,0.09)"; txt_c = "#0A0D12"
+                    border = "border:1.5px solid rgba(26,111,168,0.35);"
+                else:
+                    bg = "transparent"; txt_c = "#94a3b8"; border = "border:1px solid transparent;"
+
+                dot = (
+                    '<div style="width:4px;height:4px;border-radius:50%;'
+                    'background:#00A86B;margin:1px auto 0"></div>'
+                ) if n and not is_sel else ""
+                fw  = "700" if (n or is_sel) else "400"
+
+                cells += (
+                    f'<div style="background:{bg};{border}border-radius:5px;'
+                    f'padding:3px 1px;text-align:center;min-height:30px">'
+                    f'<div style="font-size:.68rem;font-weight:{fw};color:{txt_c};'
+                    f'font-family:IBM Plex Mono,monospace;line-height:1.2">{day}</div>'
+                    f'{dot}</div>'
+                )
+
+        month_blocks.append(
+            f'<div style="margin-bottom:14px">'
+            f'<div style="font-size:.63rem;font-weight:700;color:#0A0D12;'
+            f'font-family:Space Grotesk,sans-serif;letter-spacing:.5px;margin-bottom:6px">'
+            f'{month_label} {year}</div>'
+            f'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px">{hdr_row}</div>'
+            f'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">{cells}</div>'
+            f'</div>'
+        )
+
+    return (
+        f'<div style="background:white;border-radius:14px;padding:16px 14px 10px;'
+        f'border:1px solid #e2e8f0;box-shadow:0 2px 8px rgba(0,0,0,0.04)">'
+        + "".join(month_blocks)
+        + f'<div style="font-size:.60rem;color:#94a3b8;margin-top:2px">'
+          f'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;'
+          f'background:#00A86B;margin-right:4px"></span>días con partidos</div>'
+        + '</div>'
+    )
+
+# ═══════════════════════════════════════════════════════════
 # ANÁLISIS DE PICK ("¿Por qué este pick?")
 # ═══════════════════════════════════════════════════════════
 def generate_analysis(vb, ratings):
@@ -1279,7 +1446,9 @@ def main():
         st.divider()
         league_name = st.selectbox("🏆 Liga", list(LEAGUES.keys()))
         lc = LEAGUES[league_name]
-        days_ahead  = st.slider("📅 Próximos días", 1, 14, 7)
+        # Ventana de búsqueda: torneos usan ventana amplia (90 días) para capturar
+        # todo el calendario; ligas usan 21 días (filtrado por calendario en la vista)
+        days_ahead  = 90 if lc.get("is_tournament") else 21
         ev_min_pct  = st.slider("🎯 EV mínimo (%)", 2, 12, 4)
         ev_threshold = ev_min_pct / 100
         st.divider()
@@ -1290,13 +1459,22 @@ def main():
     is_tournament = lc.get("is_tournament", False)
     with st.spinner("Cargando datos..."):
         if is_tournament:
-            # Para torneos: datos multi-fuente (eliminatorias + torneos + amistosos)
             season_df = fetch_intl_matches(FD_KEY)
         else:
             season_df = fetch_season_matches(FD_KEY, lc["fd"])
         standings_df = fetch_standings(FD_KEY, lc["fd"])
         upcoming     = fetch_upcoming_matches(FD_KEY, lc["fd"], days_ahead)
         odds_list    = fetch_odds(ODDS_KEY, lc["odds"])
+
+    # Para torneos: si football-data.org no tiene fixtures aún, extraerlos de las cuotas
+    if is_tournament and not upcoming and odds_list and not season_df.empty:
+        upcoming = upcoming_from_odds(odds_list, season_df, days_ahead=60)
+        if upcoming:
+            st.info(
+                f"📅 **{len(upcoming)} partido(s) encontrados vía cuotas** "
+                f"(football-data.org aún no publicó el calendario del torneo). "
+                f"Los equipos con historial disponible recibirán predicciones del modelo."
+            )
 
     # ── Info de fuentes usadas (solo torneos) ─────────────────
     if is_tournament and not season_df.empty:
@@ -1386,6 +1564,82 @@ def main():
     # ── Sidebar – Part 2: Summary card (post pre-compute) ─
     render_sidebar_summary(all_vb, lc, ev_min_pct)
 
+    # ── Selector de fecha por calendario ─────────────────────
+    # Construye mapa de fechas con partidos para el calendario visual + chips
+    match_dates_map: dict = {}
+    for m in upcoming:
+        d = m["date"][:10]
+        match_dates_map[d] = match_dates_map.get(d, 0) + 1
+    sorted_match_dates = sorted(match_dates_map.keys())
+
+    # Session state: fecha seleccionada
+    if "sel_date" not in st.session_state:
+        st.session_state["sel_date"] = "all"
+
+    if sorted_match_dates:
+        st.markdown(
+            '<div style="font-size:.78rem;font-weight:600;color:#64748b;'
+            'margin-bottom:8px;font-family:Space Grotesk,sans-serif">📅 Filtrar por fecha</div>',
+            unsafe_allow_html=True
+        )
+        cal_col, chips_col = st.columns([1, 2])
+
+        with cal_col:
+            st.markdown(
+                match_dates_calendar_html(upcoming, st.session_state["sel_date"]),
+                unsafe_allow_html=True
+            )
+
+        with chips_col:
+            # Chips de fecha como botones
+            st.markdown(
+                '<div style="font-size:.70rem;color:#94a3b8;margin-bottom:8px;'
+                'font-family:IBM Plex Mono,monospace">Toca una fecha para filtrar</div>',
+                unsafe_allow_html=True
+            )
+            # Botón "Todos"
+            all_active = st.session_state["sel_date"] == "all"
+            if st.button(
+                f"📅 Todos ({len(upcoming)})",
+                key="chip_all",
+                type="primary" if all_active else "secondary",
+                use_container_width=False,
+            ):
+                st.session_state["sel_date"] = "all"
+                st.rerun()
+
+            # Un botón por cada fecha con partidos
+            cols_per_row = 3
+            date_rows = [sorted_match_dates[i:i+cols_per_row]
+                         for i in range(0, len(sorted_match_dates), cols_per_row)]
+            for row_dates in date_rows:
+                btn_cols = st.columns(len(row_dates))
+                for bc, d in zip(btn_cols, row_dates):
+                    dt_obj  = datetime.strptime(d, "%Y-%m-%d")
+                    label   = dt_obj.strftime("%d %b").upper()
+                    n       = match_dates_map[d]
+                    is_active = st.session_state["sel_date"] == d
+                    if bc.button(
+                        f"{label}\n{n}p",
+                        key=f"chip_{d}",
+                        type="primary" if is_active else "secondary",
+                        use_container_width=True,
+                    ):
+                        st.session_state["sel_date"] = d
+                        st.rerun()
+
+        st.markdown("<div style='margin-top:.5rem'></div>", unsafe_allow_html=True)
+        st.divider()
+
+    # Aplicar filtro de fecha a la lista de próximos partidos y value bets
+    sel_date = st.session_state.get("sel_date", "all")
+    if sel_date == "all":
+        upcoming_view = upcoming
+        all_vb_view   = all_vb
+    else:
+        upcoming_view = [m for m in upcoming if m["date"][:10] == sel_date]
+        all_vb_view   = [v for v in all_vb if v["date"][:10] == sel_date]
+
     # ── Tabs ─────────────────────────────────────────────────
     t1, t2, t3, t4, t5 = st.tabs(["🎯 Value Bets","🗓️ Partidos","🔍 Equipo","📋 Clasificación","📈 Tracker"])
 
@@ -1399,7 +1653,7 @@ def main():
             default=["1 Local","X Empate","2 Visitante","Over 2.5","Under 2.5"])
         st.markdown("---")
 
-        filtered = [v for v in all_vb if v["conf_label"] in conf_filter and v["label"] in market_filter]
+        filtered = [v for v in all_vb_view if v["conf_label"] in conf_filter and v["label"] in market_filter]
 
         if not filtered:
             st.info("No se detectaron value bets con estos criterios. Prueba bajando el EV mínimo.")
@@ -1434,10 +1688,11 @@ def main():
 
     # ─── TAB 2: PARTIDOS ──────────────────────────────────────
     with t2:
-        st.markdown(f"### 🗓️ Próximos {days_ahead} días · {league_name}")
-        if not upcoming:
-            st.info("No hay partidos en este período.")
-        for m in upcoming:
+        date_lbl = f"· {sel_date}" if sel_date != "all" else ""
+        st.markdown(f"### 🗓️ Partidos · {league_name} {date_lbl}")
+        if not upcoming_view:
+            st.info("No hay partidos en este período. Selecciona otra fecha o pulsa 'Todos'.")
+        for m in upcoming_view:
             info  = match_map[m["id"]]
             p,bk  = info["p"], info["bk"]
             hctx,actx,alerts = info["hctx"],info["actx"],info["alerts"]
