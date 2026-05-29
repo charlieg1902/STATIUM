@@ -322,8 +322,8 @@ def fetch_odds(odds_key, sport_key):
 # CONTEXTO COMPETITIVO
 # ═══════════════════════════════════════════════════════════
 def is_title_decided(standings_df, remaining):
-    if standings_df.empty or len(standings_df) < 2:
-        return False
+    if standings_df.empty or len(standings_df) < 2: return False
+    if "group" in standings_df.columns: return False   # torneo: nunca "título decidido"
     pts1 = standings_df[standings_df["position"]==1]["points"].values
     pts2 = standings_df[standings_df["position"]==2]["points"].values
     if len(pts1)==0 or len(pts2)==0: return False
@@ -335,7 +335,25 @@ def get_team_context(team_id, standings_df, league_cfg, matchday, title_decided=
     row = standings_df[standings_df["team_id"]==team_id]
     if row.empty:
         return {"label":"Sin datos","emoji":"❓","css":"ctx-mid","alert":False,"dead":False}
-    row       = row.iloc[0]
+    row = row.iloc[0]
+    pos = int(row["position"])
+
+    # ── Torneo (Mundial / Euros) — contexto por posición en grupo ──
+    if league_cfg.get("is_tournament", False):
+        played = int(row["played"])
+        pts    = int(row["points"])
+        group  = row.get("group", "")
+        group_label = f"Grupo {group.split('_')[-1]}" if group else "Grupo"
+        if pos == 1:
+            return {"label":f"Líder {group_label}","emoji":"🥇","css":"ctx-champ-won","alert":True,"dead":False}
+        elif pos == 2:
+            return {"label":f"Clasifica {group_label}","emoji":"✅","css":"ctx-champion","alert":True,"dead":False}
+        elif pos == 3:
+            # Tercer puesto — puede clasificar como mejor 3º
+            return {"label":"Mejor 3º (borde)","emoji":"⚠️","css":"ctx-nearrel","alert":True,"dead":False}
+        else:
+            return {"label":"En eliminación","emoji":"🔴","css":"ctx-relegation","alert":True,"dead":False}
+
     pos       = int(row["position"])
     pts       = int(row["points"])
     played    = int(row["played"])
@@ -375,6 +393,25 @@ def get_team_context(team_id, standings_df, league_cfg, matchday, title_decided=
 
 def match_alerts(home_ctx, away_ctx, matchday, league_cfg):
     alerts = []
+
+    # ── Torneo: alertas de avance/eliminación ──────────────────
+    if league_cfg.get("is_tournament", False):
+        rel_h = home_ctx["css"] == "ctx-relegation"
+        rel_a = away_ctx["css"] == "ctx-relegation"
+        lim_h = home_ctx["css"] == "ctx-nearrel"
+        lim_a = away_ctx["css"] == "ctx-nearrel"
+        if rel_h and rel_a:
+            alerts.append("🔴 Partido de eliminación directa — ambos equipos se juegan seguir en el torneo.")
+        elif rel_h:
+            alerts.append(f"🔴 {home_ctx.get('label','Local')} en eliminación — la motivación local es máxima.")
+        elif rel_a:
+            alerts.append(f"🔴 {away_ctx.get('label','Visitante')} en eliminación — la motivación visitante es máxima.")
+        if lim_h or lim_a:
+            alerts.append("⚠️ Equipo(s) en borde de clasificación — resultado con altísimo impacto en el grupo.")
+        if matchday > league_cfg["games"]:
+            alerts.append("⚡ Fase eliminatoria — el modelo Poisson es válido pero no hay historial de partidos a partido único.")
+        return alerts
+
     remaining = max(0, league_cfg["games"] - matchday)
     if remaining <= 3:
         alerts.append(f"⚠️ Jornada {matchday}/{league_cfg['games']} — el modelo NO considera motivaciones ni rotaciones en estas fechas.")
@@ -1114,6 +1151,7 @@ def main():
             st.cache_data.clear(); st.rerun()
 
     # ── Carga ────────────────────────────────────────────────
+    is_tournament = lc.get("is_tournament", False)
     with st.spinner("Cargando datos..."):
         season_df    = fetch_season_matches(FD_KEY, lc["fd"])
         standings_df = fetch_standings(FD_KEY, lc["fd"])
@@ -1121,10 +1159,26 @@ def main():
         odds_list    = fetch_odds(ODDS_KEY, lc["odds"])
 
     if season_df.empty:
-        st.error("No se pudieron cargar datos. Verifica tu FOOTBALL_API_KEY.")
-        st.stop()
-
-    ratings, avg_h, avg_a = build_ratings(season_df)
+        if is_tournament:
+            # Torneo sin partidos finalizados todavía — mostrar banner pero no parar
+            st.warning(
+                "⚽ **Sin datos históricos disponibles para este torneo.** "
+                "Posibles causas: el torneo aún no inició (el Mundial 2026 comienza en junio), "
+                "o tu plan de football-data.org no incluye datos de torneos internacionales. "
+                "El modelo Poisson requiere partidos jugados para construir ratings. "
+                "Mientras tanto puedes ver próximos partidos, cuotas y el Tracker."
+            )
+            ratings, avg_h, avg_a = {}, 1.35, 1.10
+        else:
+            # Liga: error real — API key o plan
+            st.error(
+                "❌ No se pudieron cargar partidos históricos. "
+                "Verifica que tu **FOOTBALL_API_KEY** esté correctamente configurada en "
+                "Settings → Secrets, y que tu plan incluya la liga seleccionada."
+            )
+            st.stop()
+    else:
+        ratings, avg_h, avg_a = build_ratings(season_df)
 
     # ── Metrics bar ──────────────────────────────────────────
     mc = st.columns(5)
@@ -1475,6 +1529,87 @@ def main():
                                "text/csv", use_container_width=True)
         elif not pending_picks:
             st.info("Aún no hay picks registrados. Usa '➕ Registrar pick' para empezar a trackear.")
+
+        # ── Tabla de precisión por fecha ──────────────────────
+        all_resolved = [p for p in history if p["result"] in ("hit", "miss")]
+        if all_resolved:
+            st.markdown("---")
+            st.markdown("#### 🎯 Precisión del modelo por fecha de partido")
+
+            # Agrupar por date_match
+            from collections import defaultdict
+            by_date = defaultdict(list)
+            for p in all_resolved:
+                by_date[p.get("date_match", "Sin fecha")].append(p)
+
+            prec_rows = []
+            for date_str in sorted(by_date.keys(), reverse=True):
+                picks_day = by_date[date_str]
+                hits   = sum(1 for p in picks_day if p["result"] == "hit")
+                misses = sum(1 for p in picks_day if p["result"] == "miss")
+                total  = hits + misses
+                wr     = round(hits / total * 100, 1) if total else 0
+                pnl_d  = sum((p.get("pnl") or 0) for p in picks_day)
+                avg_ev = round(sum(p.get("ev", 0) for p in picks_day) / total, 1) if total else 0
+                avg_odds = round(sum(p.get("odds", 0) for p in picks_day) / total, 2) if total else 0
+                prec_rows.append({
+                    "Fecha":     date_str,
+                    "Picks":     total,
+                    "✅ Hits":   hits,
+                    "❌ Misses": misses,
+                    "Win Rate":  f"{wr}%",
+                    "P&L día":   f"{pnl_d:+.2f}",
+                    "EV medio":  f"+{avg_ev}%",
+                    "Cuota media": avg_odds,
+                })
+
+            df_prec = pd.DataFrame(prec_rows)
+
+            # Colorear win rate con st.dataframe styler
+            def color_wr(val):
+                try:
+                    v = float(val.replace("%",""))
+                    if v >= 60:   return "color: #00A86B; font-weight: 700"
+                    elif v >= 45: return "color: #d97706; font-weight: 600"
+                    else:         return "color: #ef4444; font-weight: 600"
+                except Exception:
+                    return ""
+
+            def color_pnl(val):
+                try:
+                    v = float(val)
+                    return "color: #00A86B; font-weight:700" if v >= 0 else "color: #ef4444; font-weight:700"
+                except Exception:
+                    return ""
+
+            styled = (
+                df_prec.style
+                .applymap(color_wr,  subset=["Win Rate"])
+                .applymap(color_pnl, subset=["P&L día"])
+            )
+
+            st.dataframe(styled, use_container_width=True, hide_index=True)
+
+            # Resumen acumulado al pie
+            total_all  = len(all_resolved)
+            hits_all   = sum(1 for p in all_resolved if p["result"] == "hit")
+            wr_all     = round(hits_all / total_all * 100, 1) if total_all else 0
+            pnl_all    = sum((p.get("pnl") or 0) for p in all_resolved)
+            best_day   = max(prec_rows, key=lambda r: float(r["P&L día"]))
+            worst_day  = min(prec_rows, key=lambda r: float(r["P&L día"]))
+
+            ba1, ba2, ba3, ba4 = st.columns(4)
+            ba1.metric("Win Rate total", f"{wr_all}%",   f"{hits_all}H / {total_all - hits_all}M")
+            ba2.metric("P&L acumulado",  f"{pnl_all:+.2f}")
+            ba3.metric("Mejor fecha",    best_day["Fecha"],  best_day["P&L día"])
+            ba4.metric("Peor fecha",     worst_day["Fecha"], worst_day["P&L día"])
+
+            st.download_button(
+                "📥 Exportar tabla de precisión CSV",
+                df_prec.to_csv(index=False),
+                f"statium_precision_{datetime.now().strftime('%Y%m%d')}.csv",
+                "text/csv", use_container_width=True
+            )
 
     st.markdown("""
     <div class="footer">
