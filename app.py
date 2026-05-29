@@ -232,10 +232,33 @@ MIN_ODDS     = 1.35
 MAX_ODDS     = 7.00
 MAX_EDGE     = 0.17
 SHRINKAGE_K  = 10
-DECAY_RATE   = 0.010
+DECAY_RATE   = 0.010       # Ligas de club: peso ~0% a 1.5 años
+INTL_DECAY   = 0.0006      # Selecciones: peso ~64% a 2 años, ~41% a 3 años
 LATE_SEASON  = 5
 
 HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "picks_history.json")
+
+# ── Fuentes internacionales para el modelo WC ─────────────────
+# Pesos de competición: eliminatorias = 1.0, torneos mayores ≈ 0.90,
+# Nations League ≈ 0.80, amistosos oficiales FIFA ≈ 0.50
+# Los amistosos NO oficiales / sub-23 no aparecen en football-data.org.
+# Solo se consideran partidos de selecciones absolutas (A-team).
+INTL_SOURCES = [
+    # (fd_code,  peso_competicion,  etiqueta)
+    ("WC",  1.00, "Copa del Mundo"),         # partidos del propio torneo
+    ("WCQ", 1.00, "Eliminatorias"),          # clasificatorias WC (requiere plan API ≥ Tier 2)
+    ("EC",  0.90, "Eurocopa"),               # Euros para selecciones UEFA
+    ("ECQ", 0.85, "Clasif. Eurocopa"),       # clasificatorias UEFA
+    ("CA",  0.90, "Copa América"),           # CONMEBOL / CONCACAF
+    ("GC",  0.75, "Copa Oro"),               # CONCACAF — clave para México/USA/Canadá
+    ("NL",  0.80, "Nations League UEFA"),    # competitivo, fechas FIFA regulares
+    ("CNL", 0.75, "Nations League CONCACAF"),# CONCACAF Nations League
+    ("WCF", 0.50, "Amistosos FIFA"),         # amistosos oficiales A-team
+]
+
+# Países sede 2026: no clasificaron vía eliminatorias →
+# sus amistosos / Copa Oro / CONCACAF NL tienen peso elevado (= clasificatorias)
+HOST_NATIONS = {"united states", "usa", "u.s.a.", "canada", "mexico", "méxico"}
 
 # ═══════════════════════════════════════════════════════════
 # API
@@ -311,6 +334,70 @@ def fetch_standings(fd_key, fd_code):
     if rr_rows:
         return pd.DataFrame(rr_rows)
     return pd.DataFrame()
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_intl_matches(fd_key):
+    """
+    Combina partidos de múltiples competiciones internacionales para construir
+    ratings de selecciones. Cada partido lleva:
+      - comp_weight : peso competitivo (1.0 = eliminatoria, 0.5 = amistoso)
+      - comp_code   : código de competición de origen
+      - comp_label  : etiqueta legible
+    Los países sede (USA / Canadá / México) reciben peso 1.0 en sus partidos
+    de GC / CNL / WCF porque no tuvieron eliminatorias.
+    """
+    all_rows   = []
+    seen_ids   = set()
+
+    def _is_host(name):
+        return any(h in name.lower() for h in HOST_NATIONS)
+
+    for fd_code, base_w, label in INTL_SOURCES:
+        data = _fd_get(fd_key, f"/competitions/{fd_code}/matches",
+                       {"status": "FINISHED"})
+        if not data:
+            continue
+        matches = data.get("matches", [])
+        for m in matches:
+            mid = m.get("id")
+            if mid in seen_ids:
+                continue
+            seen_ids.add(mid)
+            ft = m.get("score", {}).get("fullTime", {})
+            if ft.get("home") is None:
+                continue
+
+            home_name = m["homeTeam"]["name"]
+            away_name = m["awayTeam"]["name"]
+
+            # Países sede: sus partidos no-eliminatorias valen igual que eliminatoria
+            if fd_code in ("GC", "CNL", "WCF", "CA", "NL") and (
+                _is_host(home_name) or _is_host(away_name)
+            ):
+                comp_w = 1.0
+            else:
+                comp_w = base_w
+
+            all_rows.append({
+                "date":       m["utcDate"],
+                "home_id":    m["homeTeam"]["id"],
+                "home_name":  home_name,
+                "away_id":    m["awayTeam"]["id"],
+                "away_name":  away_name,
+                "home_goals": int(ft["home"]),
+                "away_goals": int(ft["away"]),
+                "comp_weight": comp_w,
+                "comp_code":   fd_code,
+                "comp_label":  label,
+            })
+
+    if not all_rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(all_rows)
+    df.sort_values("date", ascending=False, inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    return df
 
 @st.cache_data(ttl=7200, show_spinner=False)
 def fetch_odds(odds_key, sport_key):
@@ -430,38 +517,76 @@ def match_alerts(home_ctx, away_ctx, matchday, league_cfg):
 # ═══════════════════════════════════════════════════════════
 # MODELO POISSON
 # ═══════════════════════════════════════════════════════════
-def build_ratings(df):
-    if df.empty or len(df)<20: return {}, 1.35, 1.10
+def build_ratings(df, decay_rate=None, intl_mode=False):
+    """
+    Construye ratings de ataque/defensa con shrinkage bayesiano.
+
+    decay_rate  : tasa de decaimiento exponencial. Si None usa DECAY_RATE (ligas)
+                  o INTL_DECAY (selecciones).
+    intl_mode   : si True, usa comp_weight por partido (columna del DataFrame)
+                  y baja el umbral mínimo de partidos a 2.
+    """
+    if decay_rate is None:
+        decay_rate = INTL_DECAY if intl_mode else DECAY_RATE
+
+    min_games = 2 if intl_mode else 4
+    min_rows  = 5 if intl_mode else 20
+    if df.empty or len(df) < min_rows:
+        return {}, 1.35, 1.10
+
     df = df.copy()
     df["date_parsed"] = pd.to_datetime(df["date"], utc=True)
     now = pd.Timestamp.now(tz="UTC")
     df["days_ago"] = (now - df["date_parsed"]).dt.days.clip(lower=0)
-    df["w"] = np.exp(-DECAY_RATE * df["days_ago"])
+    df["time_w"]   = np.exp(-decay_rate * df["days_ago"])
+
+    # Peso final = decaimiento temporal × peso competitivo
+    if intl_mode and "comp_weight" in df.columns:
+        df["w"] = df["time_w"] * df["comp_weight"].fillna(1.0)
+    else:
+        df["w"] = df["time_w"]
+
     avg_h = float(np.average(df["home_goals"].values, weights=df["w"].values))
     avg_a = float(np.average(df["away_goals"].values, weights=df["w"].values))
-    if avg_h==0 or avg_a==0: return {}, 1.35, 1.10
+    if avg_h == 0 or avg_a == 0:
+        return {}, 1.35, 1.10
+
     mean_w = df["w"].mean()
     def wavg(vals, wts, fb=1.0):
-        s=wts.sum(); return float(np.average(vals,weights=wts)) if (len(vals)>=1 and s>0) else fb
+        s = wts.sum()
+        return float(np.average(vals, weights=wts)) if (len(vals) >= 1 and s > 0) else fb
     def shrink(raw, n):
-        return (n*raw+SHRINKAGE_K*1.0)/(n+SHRINKAGE_K)
-    ratings={}
-    for tid in set(df["home_id"])|set(df["away_id"]):
-        hm=df[df["home_id"]==tid]; am=df[df["away_id"]==tid]
-        nh,na=len(hm),len(am)
-        if nh+na<4: continue
-        nh_eff=hm["w"].sum()/mean_w if nh>=1 else 0.0
-        na_eff=am["w"].sum()/mean_w if na>=1 else 0.0
-        att_h=shrink(wavg(hm["home_goals"].values,hm["w"].values)/avg_h if nh>=2 else 1.0, nh_eff)
-        att_a=shrink(wavg(am["away_goals"].values,am["w"].values)/avg_a if na>=2 else 1.0, na_eff)
-        def_h=shrink(wavg(hm["away_goals"].values,hm["w"].values)/avg_a if nh>=2 else 1.0, nh_eff)
-        def_a=shrink(wavg(am["home_goals"].values,am["w"].values)/avg_h if na>=2 else 1.0, na_eff)
-        gs_avg=(hm["home_goals"].sum()+am["away_goals"].sum())/(nh+na)
-        gc_avg=(hm["away_goals"].sum()+am["home_goals"].sum())/(nh+na)
-        ratings[tid]={"att_h":round(att_h,3),"att_a":round(att_a,3),
-                      "def_h":round(def_h,3),"def_a":round(def_a,3),
-                      "gs_avg":round(gs_avg,2),"gc_avg":round(gc_avg,2),
-                      "n":nh+na,"n_eff":round(nh_eff+na_eff,1)}
+        return (n * raw + SHRINKAGE_K * 1.0) / (n + SHRINKAGE_K)
+
+    ratings = {}
+    for tid in set(df["home_id"]) | set(df["away_id"]):
+        hm = df[df["home_id"] == tid]
+        am = df[df["away_id"] == tid]
+        nh, na = len(hm), len(am)
+        if nh + na < min_games:
+            continue
+        nh_eff = hm["w"].sum() / mean_w if nh >= 1 else 0.0
+        na_eff = am["w"].sum() / mean_w if na >= 1 else 0.0
+        att_h = shrink(wavg(hm["home_goals"].values, hm["w"].values) / avg_h if nh >= 2 else 1.0, nh_eff)
+        att_a = shrink(wavg(am["away_goals"].values, am["w"].values) / avg_a if na >= 2 else 1.0, na_eff)
+        def_h = shrink(wavg(hm["away_goals"].values, hm["w"].values) / avg_a if nh >= 2 else 1.0, nh_eff)
+        def_a = shrink(wavg(am["home_goals"].values, am["w"].values) / avg_h if na >= 2 else 1.0, na_eff)
+        gs_avg = (hm["home_goals"].sum() + am["away_goals"].sum()) / (nh + na)
+        gc_avg = (hm["away_goals"].sum() + am["home_goals"].sum()) / (nh + na)
+
+        # Meta: fuentes de datos usadas (para mostrar en análisis)
+        src_labels = []
+        if intl_mode and "comp_label" in df.columns:
+            comps_used = pd.concat([hm, am])["comp_label"].dropna().unique().tolist()
+            src_labels = comps_used
+
+        ratings[tid] = {
+            "att_h":   round(att_h, 3),   "att_a":   round(att_a, 3),
+            "def_h":   round(def_h, 3),   "def_a":   round(def_a, 3),
+            "gs_avg":  round(gs_avg, 2),  "gc_avg":  round(gc_avg, 2),
+            "n":       nh + na,            "n_eff":   round(nh_eff + na_eff, 1),
+            "src_labels": src_labels,
+        }
     return ratings, avg_h, avg_a
 
 def match_probs(home_id, away_id, ratings, avg_h, avg_a):
@@ -784,18 +909,29 @@ def generate_analysis(vb, ratings):
             elif val >= 0.85: return "inferior 📉"
             else: return "muy inferior 🔴"
 
-    def sample_note(n_eff):
-        if n_eff < 7:  return f"⚠️ muestra pequeña ({n_eff:.1f} partidos efectivos) — rating fuertemente ajustado al promedio."
-        elif n_eff < 15: return f"muestra moderada ({n_eff:.1f} partidos efectivos)."
-        else:           return f"muestra sólida ({n_eff:.1f} partidos efectivos)."
+    # Fuentes de datos (para selecciones)
+    h_srcs = ", ".join(hr.get("src_labels", [])) or "datos de liga"
+    a_srcs = ", ".join(ar.get("src_labels", [])) or "datos de liga"
+    is_intl = bool(hr.get("src_labels"))
+
+    def sample_note(n_eff, srcs=""):
+        src_txt = f" · Fuentes: *{srcs}*" if srcs else ""
+        if n_eff < 5:
+            return f"⚠️ muestra muy pequeña ({n_eff:.1f} partidos efectivos) — rating fuertemente ajustado al promedio.{src_txt}"
+        elif n_eff < 12:
+            return f"muestra moderada ({n_eff:.1f} partidos efectivos).{src_txt}"
+        else:
+            return f"muestra sólida ({n_eff:.1f} partidos efectivos).{src_txt}"
 
     lines = []
 
     # ── Market-specific reasoning ──────────────────────────
+    ref = "torneo" if is_intl else "liga"
+
     if label == "1 Local":
         lines.append(f"#### 🏠 Análisis: Victoria de {home}")
         lines.append(
-            f"**Ataque local de {home}:** `{att_h:.3f}x` la media de liga — {rating_desc(att_h)}. "
+            f"**Ataque local de {home}:** `{att_h:.3f}x` la media de {ref} — {rating_desc(att_h)}. "
             f"Promedia **{gs_h:.2f} goles/partido** en casa."
         )
         lines.append(
@@ -874,8 +1010,8 @@ def generate_analysis(vb, ratings):
 
     # ── Calidad de datos ──────────────────────────────────
     lines.append(
-        f"**🔬 Calidad de datos:** {home} — {sample_note(n_h)}  "
-        f"{away} — {sample_note(n_a)}"
+        f"**🔬 Calidad de datos:** {home} — {sample_note(n_h, h_srcs)}  "
+        f"{away} — {sample_note(n_a, a_srcs)}"
     )
 
     # ── Contexto motivacional ─────────────────────────────
@@ -1153,32 +1289,46 @@ def main():
     # ── Carga ────────────────────────────────────────────────
     is_tournament = lc.get("is_tournament", False)
     with st.spinner("Cargando datos..."):
-        season_df    = fetch_season_matches(FD_KEY, lc["fd"])
+        if is_tournament:
+            # Para torneos: datos multi-fuente (eliminatorias + torneos + amistosos)
+            season_df = fetch_intl_matches(FD_KEY)
+        else:
+            season_df = fetch_season_matches(FD_KEY, lc["fd"])
         standings_df = fetch_standings(FD_KEY, lc["fd"])
         upcoming     = fetch_upcoming_matches(FD_KEY, lc["fd"], days_ahead)
         odds_list    = fetch_odds(ODDS_KEY, lc["odds"])
 
+    # ── Info de fuentes usadas (solo torneos) ─────────────────
+    if is_tournament and not season_df.empty:
+        if "comp_label" in season_df.columns:
+            src_counts = season_df["comp_label"].value_counts()
+            src_txt = " · ".join(f"**{lbl}** ({cnt})" for lbl, cnt in src_counts.items())
+            st.info(f"📡 Fuentes de datos usadas: {src_txt}")
+
     if season_df.empty:
         if is_tournament:
-            # Torneo sin partidos finalizados todavía — mostrar banner pero no parar
             st.warning(
                 "⚽ **Sin datos históricos disponibles para este torneo.** "
-                "Posibles causas: el torneo aún no inició (el Mundial 2026 comienza en junio), "
-                "o tu plan de football-data.org no incluye datos de torneos internacionales. "
-                "El modelo Poisson requiere partidos jugados para construir ratings. "
+                "Posibles causas: el torneo aún no inició (el Mundial 2026 comienza en junio) "
+                "o tu plan de football-data.org no incluye las competiciones internacionales necesarias "
+                "(se requiere Tier 2+ para eliminatorias). "
+                "El modelo necesita partidos jugados para calcular ratings. "
                 "Mientras tanto puedes ver próximos partidos, cuotas y el Tracker."
             )
             ratings, avg_h, avg_a = {}, 1.35, 1.10
         else:
-            # Liga: error real — API key o plan
             st.error(
                 "❌ No se pudieron cargar partidos históricos. "
                 "Verifica que tu **FOOTBALL_API_KEY** esté correctamente configurada en "
-                "Settings → Secrets, y que tu plan incluya la liga seleccionada."
+                "Settings → Secrets y que tu plan incluya la liga seleccionada."
             )
             st.stop()
     else:
-        ratings, avg_h, avg_a = build_ratings(season_df)
+        ratings, avg_h, avg_a = build_ratings(
+            season_df,
+            decay_rate=INTL_DECAY if is_tournament else DECAY_RATE,
+            intl_mode=is_tournament,
+        )
 
     # ── Metrics bar ──────────────────────────────────────────
     mc = st.columns(5)
