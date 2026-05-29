@@ -225,6 +225,7 @@ LEAGUES = {
     "🇮🇹 Serie A":         {"fd":"SA",  "odds":"soccer_italy_serie_a",      "games":38,"teams":20,"cl":4,"euro":7,"rel":3},
     "🇩🇪 Bundesliga":      {"fd":"BL1", "odds":"soccer_germany_bundesliga", "games":34,"teams":18,"cl":4,"euro":6,"rel":2},
     "🇫🇷 Ligue 1":         {"fd":"FL1", "odds":"soccer_france_ligue_one",   "games":34,"teams":18,"cl":3,"euro":5,"rel":3},
+    "🌍 Mundial 2026":     {"fd":"WC",  "odds":"soccer_fifa_world_cup",     "games":3, "teams":4, "cl":2,"euro":0,"rel":1,"is_tournament":True},
 }
 
 MIN_ODDS     = 1.35
@@ -285,14 +286,30 @@ def fetch_upcoming_matches(fd_key, fd_code, days=7):
 def fetch_standings(fd_key, fd_code):
     data = _fd_get(fd_key, f"/competitions/{fd_code}/standings")
     if not data: return pd.DataFrame()
-    for s in data.get("standings",[]):
-        if s.get("type") == "TOTAL":
+    rr_rows = []
+    for s in data.get("standings", []):
+        stype = s.get("type", "")
+        if stype == "TOTAL":
+            # Liga — tabla única
             return pd.DataFrame([{
-                "position":e["position"],"team_id":e["team"]["id"],
-                "team_name":e["team"]["name"],"played":e["playedGames"],
-                "points":e["points"],"gf":e["goalsFor"],
-                "ga":e["goalsAgainst"],"gd":e["goalDifference"],
-            } for e in s.get("table",[])])
+                "position": e["position"], "team_id": e["team"]["id"],
+                "team_name": e["team"]["name"], "played": e["playedGames"],
+                "points": e["points"], "gf": e["goalsFor"],
+                "ga": e["goalsAgainst"], "gd": e["goalDifference"],
+            } for e in s.get("table", [])])
+        elif stype == "ROUND_ROBIN":
+            # Torneo (Mundial, Euros) — grupos separados; los concatenamos
+            group_name = s.get("group", "")
+            for e in s.get("table", []):
+                rr_rows.append({
+                    "position": e["position"], "team_id": e["team"]["id"],
+                    "team_name": e["team"]["name"], "played": e["playedGames"],
+                    "points": e["points"], "gf": e["goalsFor"],
+                    "ga": e["goalsAgainst"], "gd": e["goalDifference"],
+                    "group": group_name,
+                })
+    if rr_rows:
+        return pd.DataFrame(rr_rows)
     return pd.DataFrame()
 
 @st.cache_data(ttl=7200, show_spinner=False)
