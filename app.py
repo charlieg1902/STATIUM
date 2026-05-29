@@ -688,20 +688,37 @@ def team_form(df, team_id, n=6):
 # ═══════════════════════════════════════════════════════════
 # VALUE BET ENGINE
 # ═══════════════════════════════════════════════════════════
-def _sim(a,b):
+def _sim(a, b):
+    # Guard: convertir a string si no lo son (None, int, etc.)
+    a = str(a) if a is not None else ""
+    b = str(b) if b is not None else ""
     for s in [" fc"," cf"," afc"," sc"," united"]:
-        a=a.lower().replace(s,""); b=b.lower().replace(s,"")
-    return SequenceMatcher(None,a.strip(),b.strip()).ratio()
+        a = a.lower().replace(s, "")
+        b = b.lower().replace(s, "")
+    return SequenceMatcher(None, a.strip(), b.strip()).ratio()
 
 def find_odds_match(fd_home, fd_away, fd_date_str, odds_list):
-    fd_date=datetime.fromisoformat(fd_date_str.replace("Z","+00:00")).date()
-    best,bs=None,0
+    try:
+        fd_date = datetime.fromisoformat(fd_date_str.replace("Z", "+00:00")).date()
+    except Exception:
+        return None
+    best, bs = None, 0
     for om in odds_list:
-        try: om_date=datetime.fromisoformat(om["commence_time"].replace("Z","+00:00")).date()
-        except: continue
-        if abs((om_date-fd_date).days)>1: continue
-        score=_sim(fd_home,om["home_team"])+_sim(fd_away,om["away_team"])
-        if score>bs and score>1.25: bs,best=score,om
+        # Saltar entradas sin nombre de equipo (datos incompletos de la API)
+        if not om.get("home_team") or not om.get("away_team"):
+            continue
+        try:
+            om_date = datetime.fromisoformat(om["commence_time"].replace("Z", "+00:00")).date()
+        except Exception:
+            continue
+        if abs((om_date - fd_date).days) > 1:
+            continue
+        try:
+            score = _sim(fd_home, om["home_team"]) + _sim(fd_away, om["away_team"])
+        except Exception:
+            continue
+        if score > bs and score > 1.25:
+            bs, best = score, om
     return best
 
 def best_odds_for(om):
