@@ -430,8 +430,8 @@ def upcoming_from_odds(odds_list, season_df, days_ahead=60):
             return name_to_id[best_key]
         return query, None   # sin match — mostramos pero sin modelo
 
-    cutoff = (datetime.utcnow() + timedelta(days=days_ahead)).isoformat()
-    now_str = datetime.utcnow().isoformat()
+    now_dt    = datetime.utcnow().replace(tzinfo=None)
+    cutoff_dt = now_dt + timedelta(days=days_ahead)
 
     upcoming = []
     seen = set()
@@ -439,15 +439,22 @@ def upcoming_from_odds(odds_list, season_df, days_ahead=60):
         ct = om.get("commence_time", "")
         if not ct:
             continue
-        # Filtrar por ventana de días
-        if ct < now_str or ct > cutoff:
+        # Comparación robusta usando objetos datetime (no strings con "Z")
+        try:
+            ct_dt = datetime.fromisoformat(ct.replace("Z", "")).replace(tzinfo=None)
+        except Exception:
             continue
-        home_raw = om.get("home_team", "")
-        away_raw = om.get("away_team", "")
-        key = (home_raw, away_raw)
-        if key in seen:
+        if ct_dt < now_dt or ct_dt > cutoff_dt:
             continue
-        seen.add(key)
+        home_raw = om.get("home_team") or ""
+        away_raw = om.get("away_team") or ""
+        if not home_raw or not away_raw:
+            continue
+        # Dedup por (fecha_día, local, visitante) — permite misma pareja en distintos días
+        day_key = (ct_dt.date().isoformat(), home_raw.lower(), away_raw.lower())
+        if day_key in seen:
+            continue
+        seen.add(day_key)
 
         h_name, h_id = fuzzy_lookup(home_raw)
         a_name, a_id = fuzzy_lookup(away_raw)
@@ -1047,6 +1054,70 @@ def match_dates_calendar_html(upcoming, selected_date_str=None):
         + '</div>'
     )
 
+def _sidebar_cal_html(year, month, match_counts: dict, selected_date_str=None):
+    """
+    Grid mensual compacto para la barra lateral.
+    Días con partidos: fondo verde suave + punto.
+    Día seleccionado: verde sólido.
+    Hoy: aro azul.
+    """
+    today = datetime.utcnow().date()
+    matrix = cal_module.monthcalendar(year, month)
+
+    hdr = "".join(
+        f'<div style="text-align:center;font-size:.58rem;color:#94a3b8;'
+        f'font-family:IBM Plex Mono,monospace;padding-bottom:4px">{d}</div>'
+        for d in ["L","M","X","J","V","S","D"]
+    )
+    cells = ""
+    for week in matrix:
+        for day in week:
+            if day == 0:
+                cells += '<div></div>'
+                continue
+            ds = f"{year}-{month:02d}-{day:02d}"
+            n  = match_counts.get(ds, 0)
+            is_today = datetime.strptime(ds, "%Y-%m-%d").date() == today
+            is_sel   = ds == selected_date_str
+
+            if is_sel:
+                bg = "#00A86B"; txt_c = "white"; extra = ""
+            elif n:
+                bg = "rgba(0,168,107,0.12)"; txt_c = "#0A0D12"
+                extra = "border:1.5px solid rgba(0,168,107,0.40);"
+            elif is_today:
+                bg = "rgba(26,111,168,0.09)"; txt_c = "#1a6fa8"
+                extra = "border:1.5px solid rgba(26,111,168,0.35);"
+            else:
+                bg = "transparent"; txt_c = "#94a3b8"; extra = "border:1px solid transparent;"
+
+            dot = (
+                '<div style="width:4px;height:4px;border-radius:50%;background:#00A86B;'
+                'margin:1px auto 0"></div>'
+            ) if n and not is_sel else ""
+            fw = "700" if (n or is_sel) else "400"
+
+            cells += (
+                f'<div style="background:{bg};{extra}border-radius:5px;padding:3px 1px;'
+                f'text-align:center;min-height:30px">'
+                f'<div style="font-size:.68rem;font-weight:{fw};color:{txt_c};'
+                f'font-family:IBM Plex Mono,monospace;line-height:1.3">{day}</div>'
+                f'{dot}</div>'
+            )
+
+    return (
+        f'<div style="padding:4px 0 8px">'
+        f'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px">{hdr}</div>'
+        f'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">{cells}</div>'
+        f'<div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">'
+        f'<div style="display:flex;align-items:center;gap:4px;font-size:.60rem;color:#64748b">'
+        f'<div style="width:8px;height:8px;border-radius:2px;background:rgba(0,168,107,0.15);'
+        f'border:1px solid rgba(0,168,107,0.40)"></div>Partidos</div>'
+        f'<div style="display:flex;align-items:center;gap:4px;font-size:.60rem;color:#64748b">'
+        f'<div style="width:8px;height:8px;border-radius:2px;background:#00A86B"></div>Seleccionado</div>'
+        f'</div></div>'
+    )
+
 # ═══════════════════════════════════════════════════════════
 # ANÁLISIS DE PICK ("¿Por qué este pick?")
 # ═══════════════════════════════════════════════════════════
@@ -1578,75 +1649,87 @@ def main():
 
     all_vb.sort(key=lambda x: x["ev"], reverse=True)
 
-    # ── Sidebar – Part 2: Summary card (post pre-compute) ─
+    # ── Sidebar – Part 2: Summary + Calendario ───────────────
     render_sidebar_summary(all_vb, lc, ev_min_pct)
 
-    # ── Selector de fecha por calendario ─────────────────────
-    # Construye mapa de fechas con partidos para el calendario visual + chips
+    # Mapa de fechas con partidos
     match_dates_map: dict = {}
     for m in upcoming:
         d = m["date"][:10]
         match_dates_map[d] = match_dates_map.get(d, 0) + 1
     sorted_match_dates = sorted(match_dates_map.keys())
 
-    # Session state: fecha seleccionada
+    # Session state
     if "sel_date" not in st.session_state:
         st.session_state["sel_date"] = "all"
+    if "cal_month" not in st.session_state:
+        # Mes inicial = mes del primer partido próximo o mes actual
+        if sorted_match_dates:
+            first_d = datetime.strptime(sorted_match_dates[0], "%Y-%m-%d")
+            st.session_state["cal_month"] = (first_d.year, first_d.month)
+        else:
+            now = datetime.utcnow()
+            st.session_state["cal_month"] = (now.year, now.month)
 
-    if sorted_match_dates:
-        st.markdown(
-            '<div style="font-size:.78rem;font-weight:600;color:#64748b;'
-            'margin-bottom:8px;font-family:Space Grotesk,sans-serif">📅 Filtrar por fecha</div>',
-            unsafe_allow_html=True
-        )
-        cal_col, chips_col = st.columns([1, 2])
-
-        with cal_col:
+    # Renderizar calendario en sidebar
+    with st.sidebar:
+        if sorted_match_dates:
+            st.divider()
             st.markdown(
-                match_dates_calendar_html(upcoming, st.session_state["sel_date"]),
+                '<div style="font-size:.72rem;font-weight:700;color:#64748b;'
+                'letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;'
+                'font-family:Space Grotesk,sans-serif">📅 Calendario</div>',
                 unsafe_allow_html=True
             )
 
-        with chips_col:
-            # Chips de fecha como botones
-            st.markdown(
-                '<div style="font-size:.70rem;color:#94a3b8;margin-bottom:8px;'
-                'font-family:IBM Plex Mono,monospace">Toca una fecha para filtrar</div>',
+            # Navegación de mes
+            cy, cm = st.session_state["cal_month"]
+            nav1, nav2, nav3 = st.columns([1, 3, 1])
+            if nav1.button("‹", key="cal_prev", use_container_width=True):
+                if cm == 1:
+                    st.session_state["cal_month"] = (cy - 1, 12)
+                else:
+                    st.session_state["cal_month"] = (cy, cm - 1)
+                st.rerun()
+            nav2.markdown(
+                f'<div style="text-align:center;font-size:.75rem;font-weight:700;'
+                f'color:#0A0D12;font-family:Space Grotesk,sans-serif;padding-top:6px">'
+                f'{cal_module.month_name[cm].upper()} {cy}</div>',
                 unsafe_allow_html=True
             )
-            # Botón "Todos"
-            all_active = st.session_state["sel_date"] == "all"
-            if st.button(
-                f"📅 Todos ({len(upcoming)})",
-                key="chip_all",
-                type="primary" if all_active else "secondary",
-                use_container_width=False,
-            ):
-                st.session_state["sel_date"] = "all"
+            if nav3.button("›", key="cal_next", use_container_width=True):
+                if cm == 12:
+                    st.session_state["cal_month"] = (cy + 1, 1)
+                else:
+                    st.session_state["cal_month"] = (cy, cm + 1)
                 st.rerun()
 
-            # Un botón por cada fecha con partidos
-            cols_per_row = 3
-            date_rows = [sorted_match_dates[i:i+cols_per_row]
-                         for i in range(0, len(sorted_match_dates), cols_per_row)]
-            for row_dates in date_rows:
-                btn_cols = st.columns(len(row_dates))
-                for bc, d in zip(btn_cols, row_dates):
-                    dt_obj  = datetime.strptime(d, "%Y-%m-%d")
-                    label   = dt_obj.strftime("%d %b").upper()
-                    n       = match_dates_map[d]
-                    is_active = st.session_state["sel_date"] == d
-                    if bc.button(
-                        f"{label}\n{n}p",
-                        key=f"chip_{d}",
-                        type="primary" if is_active else "secondary",
-                        use_container_width=True,
-                    ):
-                        st.session_state["sel_date"] = d
-                        st.rerun()
+            # Grid del mes actual
+            st.markdown(
+                _sidebar_cal_html(cy, cm, match_dates_map, st.session_state["sel_date"]),
+                unsafe_allow_html=True
+            )
 
-        st.markdown("<div style='margin-top:.5rem'></div>", unsafe_allow_html=True)
-        st.divider()
+            # Selector de fecha (funcional)
+            date_opts = ["Todos"] + sorted_match_dates
+            sel_label = st.selectbox(
+                "Fecha",
+                date_opts,
+                index=0 if st.session_state["sel_date"] == "all"
+                      else (date_opts.index(st.session_state["sel_date"])
+                            if st.session_state["sel_date"] in date_opts else 0),
+                format_func=lambda d: "📅 Todos los partidos" if d == "Todos"
+                            else datetime.strptime(d, "%Y-%m-%d").strftime("%a %d/%m"),
+                label_visibility="collapsed",
+            )
+            new_sel = "all" if sel_label == "Todos" else sel_label
+            if new_sel != st.session_state["sel_date"]:
+                st.session_state["sel_date"] = new_sel
+                # Saltar al mes del partido seleccionado
+                if new_sel != "all":
+                    d_obj = datetime.strptime(new_sel, "%Y-%m-%d")
+                    st.session_state["cal_month"] = (d_obj.year, d_obj.month)
+                st.rerun()
 
     # Aplicar filtro de fecha a la lista de próximos partidos y value bets
     sel_date = st.session_state.get("sel_date", "all")
