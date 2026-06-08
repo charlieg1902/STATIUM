@@ -433,9 +433,12 @@ def fetch_upcoming_matches(fd_key, fd_code, days=7):
     data = _fd_get(fd_key, f"/competitions/{fd_code}/matches",
                    {"status":"SCHEDULED","dateFrom":today,"dateTo":future})
     if not data: return []
+    # Nota: en torneos como el Mundial, algunos cruces aún no definen equipo
+    # (ej. "Ganador Grupo A") y football-data.org devuelve `name: null` — lo
+    # normalizamos a un texto legible para evitar errores de tipo más adelante.
     return [{"id":m["id"],"date":m["utcDate"],
-             "home_id":m["homeTeam"]["id"],"home_name":m["homeTeam"]["name"],
-             "away_id":m["awayTeam"]["id"],"away_name":m["awayTeam"]["name"],
+             "home_id":m["homeTeam"]["id"],"home_name":m["homeTeam"].get("name") or "Por definir",
+             "away_id":m["awayTeam"]["id"],"away_name":m["awayTeam"].get("name") or "Por definir",
              "matchday":m.get("matchday") or 0} for m in data.get("matches",[])]
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -1725,18 +1728,24 @@ def main():
                     d = datetime.fromisoformat(m["date"].replace("Z", "+00:00")).date().isoformat()
                 except Exception:
                     d = str(m["date"])[:10]
-                existing_keys.append((d, m["home_name"].lower(), m["away_name"].lower()))
+                existing_keys.append((
+                    d,
+                    (m.get("home_name") or "").lower(),
+                    (m.get("away_name") or "").lower(),
+                ))
 
             def _is_dup(om):
                 try:
                     d = datetime.fromisoformat(om["date"].replace("Z", "+00:00")).date().isoformat()
                 except Exception:
                     d = str(om["date"])[:10]
+                om_home = (om.get("home_name") or "").lower()
+                om_away = (om.get("away_name") or "").lower()
                 for ed, eh, ea in existing_keys:
                     if d != ed:
                         continue
-                    h_sim = SequenceMatcher(None, om["home_name"].lower(), eh).ratio()
-                    a_sim = SequenceMatcher(None, om["away_name"].lower(), ea).ratio()
+                    h_sim = SequenceMatcher(None, om_home, eh).ratio()
+                    a_sim = SequenceMatcher(None, om_away, ea).ratio()
                     if h_sim >= 0.72 and a_sim >= 0.72:
                         return True
                 return False
