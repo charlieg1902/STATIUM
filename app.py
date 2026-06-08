@@ -556,13 +556,17 @@ def upcoming_from_odds(odds_list, season_df, days_ahead=60):
         q = query.lower().strip()
         if q in name_to_id:
             return name_to_id[q]
-        # Fuzzy sobre todas las claves
+        qn = _norm_country(q)
+        if qn in name_to_id:
+            return name_to_id[qn]
+        # Fuzzy sobre todas las claves (con normalización de alias de selecciones)
         best_score, best_key = 0, None
         for key in name_to_id:
-            s = SequenceMatcher(None, q, key).ratio()
+            s = max(SequenceMatcher(None, q, key).ratio(),
+                    SequenceMatcher(None, qn, _norm_country(key)).ratio())
             if s > best_score:
                 best_score, best_key = s, key
-        if best_score >= 0.72:
+        if best_score >= 0.68:
             return name_to_id[best_key]
         return query, None   # sin match — mostramos pero sin modelo
 
@@ -690,7 +694,7 @@ def get_team_context(team_id, standings_df, league_cfg, matchday, title_decided=
         return {"label":"Sin motivación","emoji":"😴","css":"ctx-dead","alert":True,"dead":True}
     return {"label":"Zona media","emoji":"➖","css":"ctx-mid","alert":False,"dead":False}
 
-def match_alerts(home_ctx, away_ctx, matchday, league_cfg):
+def match_alerts(home_ctx, away_ctx, matchday, league_cfg, home_name="Local", away_name="Visitante"):
     alerts = []
 
     # ── Torneo: alertas de avance/eliminación ──────────────────
@@ -702,9 +706,9 @@ def match_alerts(home_ctx, away_ctx, matchday, league_cfg):
         if rel_h and rel_a:
             alerts.append("🔴 Partido de eliminación directa — ambos equipos se juegan seguir en el torneo.")
         elif rel_h:
-            alerts.append(f"🔴 {home_ctx.get('label','Local')} en eliminación — la motivación local es máxima.")
+            alerts.append(f"🔴 {home_name} está en zona de eliminación — la motivación local es máxima.")
         elif rel_a:
-            alerts.append(f"🔴 {away_ctx.get('label','Visitante')} en eliminación — la motivación visitante es máxima.")
+            alerts.append(f"🔴 {away_name} está en zona de eliminación — la motivación visitante es máxima.")
         if lim_h or lim_a:
             alerts.append("⚠️ Equipo(s) en borde de clasificación — resultado con altísimo impacto en el grupo.")
         if matchday > league_cfg["games"]:
@@ -831,10 +835,32 @@ def team_form(df, team_id, n=6):
 # ═══════════════════════════════════════════════════════════
 # VALUE BET ENGINE
 # ═══════════════════════════════════════════════════════════
+# Selecciones nacionales que distintas fuentes (football-data.org vs. casas
+# de apuestas) nombran de forma diferente — normalizamos a una forma canónica
+# antes de comparar para no duplicar el mismo partido en la lista.
+COUNTRY_ALIASES = {
+    "czech republic": "czechia", "czechia": "czechia",
+    "south korea": "korea republic", "korea republic": "korea republic", "korea": "korea republic",
+    "usa": "united states", "united states": "united states", "us soccer": "united states",
+    "ivory coast": "cote d'ivoire", "côte d'ivoire": "cote d'ivoire", "cote d'ivoire": "cote d'ivoire",
+    "bosnia and herzegovina": "bosnia-herzegovina", "bosnia-herzegovina": "bosnia-herzegovina", "bosnia": "bosnia-herzegovina",
+    "north macedonia": "macedonia", "macedonia": "macedonia",
+    "iran": "ir iran", "ir iran": "ir iran",
+    "cape verde": "cabo verde", "cabo verde": "cabo verde",
+    "dr congo": "congo dr", "congo dr": "congo dr", "democratic republic of the congo": "congo dr",
+    "united kingdom": "great britain", "great britain": "great britain",
+    "england": "england", "republic of ireland": "ireland", "ireland": "ireland",
+}
+
+def _norm_country(name):
+    n = str(name or "").lower().strip()
+    return COUNTRY_ALIASES.get(n, n)
+
 def _sim(a, b):
     # Guard: convertir a string si no lo son (None, int, etc.)
     a = str(a) if a is not None else ""
     b = str(b) if b is not None else ""
+    a, b = _norm_country(a), _norm_country(b)
     for s in [" fc"," cf"," afc"," sc"," united"]:
         a = a.lower().replace(s, "")
         b = b.lower().replace(s, "")
@@ -910,6 +936,35 @@ def detect_value_bets(probs, bk, home_name, away_name, ev_threshold):
                       "ev_css":ev_css,"conf_css":conf_css,
                       "home":home_name,"away":away_name})
     return found
+
+def suggest_top_market(probs, bk):
+    """
+    Cuando el modelo no detecta ningún 'value bet' (EV insuficiente), igual
+    queremos mostrarle al usuario cuál es el mercado que el modelo considera
+    más probable —siempre que la casa de apuestas ofrezca cuota para él—
+    para que cada partido tenga al menos una sugerencia de referencia.
+    Esto NO es un value bet (no implica edge positivo): se etiqueta aparte.
+    """
+    if not probs:
+        return None
+    candidates = [
+        ("1 Local",     probs["home_win"], bk.get("h2h_1", 0), probs.get("fair_1")),
+        ("X Empate",    probs["draw"],     bk.get("h2h_x", 0), probs.get("fair_x")),
+        ("2 Visitante", probs["away_win"], bk.get("h2h_2", 0), probs.get("fair_2")),
+        ("Over 2.5",    probs["over25"],   bk.get("o25", 0),   probs.get("fair_o25")),
+        ("Under 2.5",   probs["under25"],  bk.get("u25", 0),   probs.get("fair_u25")),
+    ]
+    candidates = [c for c in candidates if c[2] and c[2] > 0]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda c: c[1], reverse=True)
+    label, model_p, odd, fair = candidates[0]
+    implied = 1 / odd if odd else 0
+    return {
+        "label": label, "model_p": round(model_p, 4), "bk_odds": odd,
+        "fair": fair, "implied": round(implied, 4),
+        "edge": round(model_p - implied, 4),
+    }
 
 # ═══════════════════════════════════════════════════════════
 # TRACKER — PERSISTENCIA Y ESTADÍSTICAS
@@ -1720,7 +1775,7 @@ def main():
     # publican partidos que aún no aparecen en football-data.org (y viceversa), por lo
     # que se fusionan ambas listas evitando duplicados (mismo día + nombres similares).
     if is_tournament and odds_list and not season_df.empty:
-        odds_upcoming = upcoming_from_odds(odds_list, season_df, days_ahead=60)
+        odds_upcoming = upcoming_from_odds(odds_list, season_df, days_ahead=days_ahead)
         if odds_upcoming:
             existing_keys = []
             for m in upcoming:
@@ -1730,8 +1785,8 @@ def main():
                     d = str(m["date"])[:10]
                 existing_keys.append((
                     d,
-                    (m.get("home_name") or "").lower(),
-                    (m.get("away_name") or "").lower(),
+                    m.get("home_name") or "",
+                    m.get("away_name") or "",
                 ))
 
             def _is_dup(om):
@@ -1739,14 +1794,16 @@ def main():
                     d = datetime.fromisoformat(om["date"].replace("Z", "+00:00")).date().isoformat()
                 except Exception:
                     d = str(om["date"])[:10]
-                om_home = (om.get("home_name") or "").lower()
-                om_away = (om.get("away_name") or "").lower()
+                om_home = om.get("home_name") or ""
+                om_away = om.get("away_name") or ""
                 for ed, eh, ea in existing_keys:
                     if d != ed:
                         continue
-                    h_sim = SequenceMatcher(None, om_home, eh).ratio()
-                    a_sim = SequenceMatcher(None, om_away, ea).ratio()
-                    if h_sim >= 0.72 and a_sim >= 0.72:
+                    # _sim normaliza alias de selecciones (Czechia/Czech Republic,
+                    # South Korea/Korea Republic, etc.) antes de comparar
+                    h_sim = _sim(om_home, eh)
+                    a_sim = _sim(om_away, ea)
+                    if h_sim >= 0.62 and a_sim >= 0.62:
                         return True
                 return False
 
@@ -1820,7 +1877,7 @@ def main():
         td    = is_title_decided(standings_df, remaining)
         hctx  = get_team_context(m["home_id"], standings_df, lc, md, td)
         actx  = get_team_context(m["away_id"], standings_df, lc, md, td)
-        alerts= match_alerts(hctx, actx, md, lc)
+        alerts= match_alerts(hctx, actx, md, lc, m["home_name"], m["away_name"])
         # Form for card display
         hform = team_form(season_df, m["home_id"], 3)
         aform = team_form(season_df, m["away_id"], 3)
@@ -2144,8 +2201,20 @@ def main():
                     b3.metric("✈️ Visit.",   bk["h2h_2"],f"Justa {p['fair_2']}")
                     b4.metric("Over 2.5",    bk["o25"],  f"Justa {p['fair_o25']}")
                     b5.metric("Under 2.5",   bk["u25"],  f"Justa {p['fair_u25']}")
-                for vb in info["vbets"]:
-                    st.success(f"🎯 **{vb['label']}** @ {vb['bk_odds']} · Modelo {vb['model_p']*100:.1f}% · Implícita {vb['implied']*100:.1f}% · **EV +{vb['ev']*100:.1f}%** · {vb['conf_icon']} {vb['conf_label']}")
+                if info["vbets"]:
+                    for vb in info["vbets"]:
+                        st.success(f"🎯 **{vb['label']}** @ {vb['bk_odds']} · Modelo {vb['model_p']*100:.1f}% · Implícita {vb['implied']*100:.1f}% · **EV +{vb['ev']*100:.1f}%** · {vb['conf_icon']} {vb['conf_label']}")
+                else:
+                    sugg = suggest_top_market(p, bk)
+                    if sugg:
+                        st.info(
+                            f"💡 **Sugerencia del modelo (sin edge de valor):** "
+                            f"**{sugg['label']}** @ {sugg['bk_odds']} · Modelo {sugg['model_p']*100:.1f}% "
+                            f"· Implícita {sugg['implied']*100:.1f}% · cuota justa ≈ {sugg['fair']} — "
+                            f"el mercado más probable según el modelo, aunque la cuota actual no ofrece valor (EV) suficiente."
+                        )
+                    else:
+                        st.caption("Sin cuotas disponibles para sugerir un mercado en este partido todavía.")
 
     # ─── TAB 3: EQUIPO ────────────────────────────────────────
     with t3:
