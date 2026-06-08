@@ -51,11 +51,121 @@ st.markdown(f"""
   /* ── Reset & Base ── */
   .block-container {{ padding-top: 1.2rem; max-width: 1200px; }}
   html, body, [class*="css"] {{ font-family: 'Space Grotesk', sans-serif !important; }}
+  * {{ scroll-behavior: smooth; }}
+
+  /* ── Global lively transitions ── */
+  @keyframes fadeIn {{
+    from {{ opacity: 0; transform: translateY(8px); }}
+    to   {{ opacity: 1; transform: translateY(0); }}
+  }}
+  @keyframes pulseGlow {{
+    0%, 100% {{ box-shadow: 0 0 0 0 rgba(0,168,107,0.0); }}
+    50%      {{ box-shadow: 0 0 0 6px rgba(0,168,107,0.08); }}
+  }}
+  @keyframes shimmer {{
+    0%   {{ background-position: -200px 0; }}
+    100% {{ background-position: calc(200px + 100%) 0; }}
+  }}
+
+  .main .block-container {{ animation: fadeIn 0.5s ease-out both; }}
+
+  /* Buttons — smooth lift + color sweep */
+  .stButton > button {{
+    transition: transform 0.18s cubic-bezier(.2,.8,.2,1), box-shadow 0.18s ease, background 0.25s ease, border-color 0.25s ease !important;
+  }}
+  .stButton > button:hover {{
+    transform: translateY(-1px) scale(1.015);
+    box-shadow: 0 6px 18px rgba(0,168,107,0.18) !important;
+    border-color: {BRAND_GREEN} !important;
+    color: {BRAND_GREEN} !important;
+  }}
+  .stButton > button:active {{ transform: translateY(0) scale(0.98); }}
+
+  /* Download button glow */
+  .stDownloadButton > button {{ transition: all 0.2s ease !important; }}
+  .stDownloadButton > button:hover {{ transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,168,107,0.20) !important; }}
+
+  /* Tabs — underline slide + color fade */
+  [data-testid="stTabs"] button {{
+    font-weight:600; font-family:'Space Grotesk',sans-serif !important;
+    transition: color 0.2s ease, background 0.2s ease !important;
+    border-radius: 8px 8px 0 0 !important;
+  }}
+  [data-testid="stTabs"] button:hover {{
+    color: {BRAND_GREEN} !important;
+    background: rgba(0,168,107,0.06) !important;
+  }}
+  [data-testid="stTabs"] [aria-selected="true"] {{
+    transition: all 0.25s cubic-bezier(.2,.8,.2,1) !important;
+  }}
+  [data-testid="stTabs"] [data-baseweb="tab-highlight"] {{
+    transition: left 0.3s cubic-bezier(.2,.8,.2,1), width 0.3s cubic-bezier(.2,.8,.2,1) !important;
+    background-color: {BRAND_GREEN} !important;
+  }}
+  [data-testid="stTabs"] [data-baseweb="tab-panel"] {{ animation: fadeIn 0.35s ease-out both; }}
+
+  /* Selectbox / sliders / inputs — soft focus glow */
+  [data-baseweb="select"] > div, .stTextInput input, .stNumberInput input {{
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+  }}
+  [data-baseweb="select"] > div:hover, .stTextInput input:hover {{
+    border-color: {BRAND_GREEN} !important;
+  }}
+  [data-baseweb="select"] > div:focus-within, .stTextInput input:focus {{
+    box-shadow: 0 0 0 3px rgba(0,168,107,0.15) !important;
+    border-color: {BRAND_GREEN} !important;
+  }}
+  div[data-testid="stSlider"] [role="slider"] {{
+    transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+  }}
+  div[data-testid="stSlider"] [role="slider"]:hover {{
+    transform: scale(1.25);
+    box-shadow: 0 0 0 8px rgba(0,168,107,0.12) !important;
+  }}
+
+  /* Expanders — smooth open */
+  [data-testid="stExpander"] {{
+    transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+    border-radius: 10px !important;
+  }}
+  [data-testid="stExpander"]:hover {{
+    border-color: rgba(0,168,107,0.35) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+  }}
+  [data-testid="stExpanderDetails"] {{ animation: fadeIn 0.3s ease-out both; }}
+
+  /* Metric cards pop-in */
+  div[data-testid="stMetric"] {{ transition: transform 0.18s ease; }}
+  div[data-testid="stMetric"]:hover {{ transform: translateY(-2px); }}
+
+  /* Dataframes — subtle entrance */
+  [data-testid="stDataFrame"] {{ animation: fadeIn 0.4s ease-out both; border-radius: 10px; overflow: hidden; }}
+
+  /* Alerts / info boxes — slide in */
+  [data-testid="stAlert"] {{
+    animation: fadeIn 0.35s ease-out both;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    border-radius: 10px !important;
+  }}
+  [data-testid="stAlert"]:hover {{ transform: translateX(2px); }}
+
+  /* Sidebar nav buttons (calendar arrows etc.) */
+  [data-testid="stSidebar"] .stButton > button {{
+    transition: all 0.18s ease !important;
+  }}
+  [data-testid="stSidebar"] .stButton > button:hover {{
+    background: rgba(0,168,107,0.10) !important;
+  }}
+
+  /* Links */
+  a {{ transition: color 0.15s ease, opacity 0.15s ease; }}
+  a:hover {{ opacity: 0.75; }}
 
   /* ── Header ── */
   .stat-header {{
     display: flex; align-items: center; gap: 16px;
     padding: 20px 0 8px 0;
+    animation: fadeIn 0.6s ease-out both;
   }}
   .stat-logo {{ flex-shrink: 0; }}
   .stat-title {{
@@ -84,6 +194,12 @@ st.markdown(f"""
     box-shadow: 0 2px 12px rgba(0,0,0,0.06);
     border-top: 3px solid {BRAND_GREEN};
     text-align: center;
+    transition: transform 0.2s cubic-bezier(.2,.8,.2,1), box-shadow 0.2s ease;
+    animation: fadeIn 0.45s ease-out both;
+  }}
+  .stat-card:hover {{
+    transform: translateY(-3px);
+    box-shadow: 0 10px 26px rgba(0,168,107,0.16);
   }}
   .stat-card-num  {{ font-size: 1.8rem; font-weight: 800; color: {BRAND_DARK}; font-family: 'IBM Plex Mono', monospace; }}
   .stat-card-label{{ font-size: 0.72rem; color: #64748b; margin-top: 2px; letter-spacing: .3px; }}
@@ -220,12 +336,12 @@ FD_BASE   = "https://api.football-data.org/v4"
 ODDS_BASE = "https://api.the-odds-api.com/v4"
 
 LEAGUES = {
-    "🇬🇧 Premier League": {"fd":"PL",  "odds":"soccer_epl",               "games":38,"teams":20,"cl":4,"euro":6,"rel":3},
-    "🇪🇸 La Liga":         {"fd":"PD",  "odds":"soccer_spain_la_liga",      "games":38,"teams":20,"cl":4,"euro":7,"rel":3},
-    "🇮🇹 Serie A":         {"fd":"SA",  "odds":"soccer_italy_serie_a",      "games":38,"teams":20,"cl":4,"euro":7,"rel":3},
-    "🇩🇪 Bundesliga":      {"fd":"BL1", "odds":"soccer_germany_bundesliga", "games":34,"teams":18,"cl":4,"euro":6,"rel":2},
-    "🇫🇷 Ligue 1":         {"fd":"FL1", "odds":"soccer_france_ligue_one",   "games":34,"teams":18,"cl":3,"euro":5,"rel":3},
-    "🌍 Mundial 2026":     {"fd":"WC",  "odds":"soccer_fifa_world_cup",     "games":3, "teams":4, "cl":2,"euro":0,"rel":1,"is_tournament":True},
+    "🌍 Mundial 2026":     {"fd":"WC",  "odds":"soccer_fifa_world_cup",     "games":3, "teams":4, "cl":2,"euro":0,"rel":1,"is_tournament":True,"featured":True},
+    "🇬🇧 Premier League": {"fd":"PL",  "odds":"soccer_epl",               "games":38,"teams":20,"cl":4,"euro":6,"rel":3,"off_season":True},
+    "🇪🇸 La Liga":         {"fd":"PD",  "odds":"soccer_spain_la_liga",      "games":38,"teams":20,"cl":4,"euro":7,"rel":3,"off_season":True},
+    "🇮🇹 Serie A":         {"fd":"SA",  "odds":"soccer_italy_serie_a",      "games":38,"teams":20,"cl":4,"euro":7,"rel":3,"off_season":True},
+    "🇩🇪 Bundesliga":      {"fd":"BL1", "odds":"soccer_germany_bundesliga", "games":34,"teams":18,"cl":4,"euro":6,"rel":2,"off_season":True},
+    "🇫🇷 Ligue 1":         {"fd":"FL1", "odds":"soccer_france_ligue_one",   "games":34,"teams":18,"cl":3,"euro":5,"rel":3,"off_season":True},
 }
 
 MIN_ODDS     = 1.35
@@ -1532,8 +1648,34 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         st.divider()
-        league_name = st.selectbox("🏆 Liga", list(LEAGUES.keys()))
+        st.markdown(
+            '<div style="background:linear-gradient(135deg,rgba(0,168,107,0.12),rgba(0,168,107,0.03));'
+            'border:1px solid rgba(0,168,107,0.30);border-radius:10px;padding:9px 12px;margin-bottom:10px;'
+            'display:flex;align-items:center;gap:8px">'
+            '<span style="font-size:1.1rem">🌍</span>'
+            '<div><div style="font-size:.68rem;font-weight:700;color:#00A86B;letter-spacing:.4px;'
+            'font-family:\'IBM Plex Mono\',monospace">EN VIVO · FOCO MUNDIAL 2026</div>'
+            '<div style="font-size:.65rem;color:#64748b;margin-top:1px">Las grandes ligas están en receso de temporada</div>'
+            '</div></div>',
+            unsafe_allow_html=True
+        )
+        league_opts = list(LEAGUES.keys())
+        league_name = st.selectbox(
+            "🏆 Liga / Torneo", league_opts, index=0,
+            format_func=lambda n: f"{n}  ✨" if LEAGUES[n].get("featured")
+                         else f"{n}  · receso" if LEAGUES[n].get("off_season") else n,
+        )
         lc = LEAGUES[league_name]
+        if lc.get("off_season") and not lc.get("is_tournament"):
+            st.markdown(
+                '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;'
+                'padding:8px 12px;margin-top:-2px;margin-bottom:10px;font-size:.74rem;color:#92400e;'
+                'font-family:\'Space Grotesk\',sans-serif">'
+                '😴 Esta liga está fuera de temporada — los datos corresponden a la última campaña '
+                'finalizada. Te recomendamos enfocarte en <b>🌍 Mundial 2026</b> para esta semana.'
+                '</div>',
+                unsafe_allow_html=True
+            )
         # Ventana de búsqueda: torneos usan ventana amplia (90 días) para capturar
         # todo el calendario; ligas usan 21 días (filtrado por calendario en la vista)
         days_ahead  = 90 if lc.get("is_tournament") else 21
