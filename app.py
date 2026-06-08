@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import poisson
 from difflib import SequenceMatcher
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import warnings, json, os, uuid, calendar as cal_module
 warnings.filterwarnings("ignore")
 
@@ -334,6 +334,23 @@ st.markdown(f"""
 # ═══════════════════════════════════════════════════════════
 FD_BASE   = "https://api.football-data.org/v4"
 ODDS_BASE = "https://api.the-odds-api.com/v4"
+
+# ── Hora local del usuario: Perú (America/Lima) — UTC-5 todo el año, sin DST ──
+PERU_OFFSET = timedelta(hours=-5)
+
+def to_lima(dt):
+    """Convierte un datetime (con o sin tz, asumido UTC) a hora de Perú (UTC-5)."""
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt + PERU_OFFSET
+
+def fmt_match_dt(date_str, fmt="%a %d/%m · %H:%M"):
+    """Formatea una fecha ISO en UTC (ej. '2026-06-11T19:00:00Z') a hora de Perú legible."""
+    try:
+        dt = datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
+    except Exception:
+        return str(date_str)
+    return to_lima(dt).strftime(fmt) + " (PE)"
 
 LEAGUES = {
     "🌍 Mundial 2026":     {"fd":"WC",  "odds":"soccer_fifa_world_cup",     "games":3, "teams":4, "cl":2,"euro":0,"rel":1,"is_tournament":True,"featured":True},
@@ -1455,8 +1472,7 @@ def prob_bar_html(p, home_name, away_name):
     </div>"""
 
 def vb_card_html(vb, idx=0):
-    dt       = datetime.fromisoformat(vb["date"].replace("Z","+00:00"))
-    date_str = dt.strftime("%a %d/%m · %H:%M UTC")
+    date_str = fmt_match_dt(vb["date"])
     hctx, actx = vb["home_ctx"], vb["away_ctx"]
     ev_pct   = vb["ev"]*100
     edge_pp  = vb["edge"]*100
@@ -1696,15 +1712,44 @@ def main():
         upcoming     = fetch_upcoming_matches(FD_KEY, lc["fd"], days_ahead)
         odds_list    = fetch_odds(ODDS_KEY, lc["odds"])
 
-    # Para torneos: si football-data.org no tiene fixtures aún, extraerlos de las cuotas
-    if is_tournament and not upcoming and odds_list and not season_df.empty:
-        upcoming = upcoming_from_odds(odds_list, season_df, days_ahead=60)
-        if upcoming:
-            st.info(
-                f"📅 **{len(upcoming)} partido(s) encontrados vía cuotas** "
-                f"(football-data.org aún no publicó el calendario del torneo). "
-                f"Los equipos con historial disponible recibirán predicciones del modelo."
-            )
+    # Para torneos: combinar fixtures de football-data.org con los derivados de cuotas.
+    # No nos quedamos solo con la 1ª fuente que responda — algunas casas de apuestas
+    # publican partidos que aún no aparecen en football-data.org (y viceversa), por lo
+    # que se fusionan ambas listas evitando duplicados (mismo día + nombres similares).
+    if is_tournament and odds_list and not season_df.empty:
+        odds_upcoming = upcoming_from_odds(odds_list, season_df, days_ahead=60)
+        if odds_upcoming:
+            existing_keys = []
+            for m in upcoming:
+                try:
+                    d = datetime.fromisoformat(m["date"].replace("Z", "+00:00")).date().isoformat()
+                except Exception:
+                    d = str(m["date"])[:10]
+                existing_keys.append((d, m["home_name"].lower(), m["away_name"].lower()))
+
+            def _is_dup(om):
+                try:
+                    d = datetime.fromisoformat(om["date"].replace("Z", "+00:00")).date().isoformat()
+                except Exception:
+                    d = str(om["date"])[:10]
+                for ed, eh, ea in existing_keys:
+                    if d != ed:
+                        continue
+                    h_sim = SequenceMatcher(None, om["home_name"].lower(), eh).ratio()
+                    a_sim = SequenceMatcher(None, om["away_name"].lower(), ea).ratio()
+                    if h_sim >= 0.72 and a_sim >= 0.72:
+                        return True
+                return False
+
+            added = [om for om in odds_upcoming if not _is_dup(om)]
+            if added:
+                upcoming = upcoming + added
+                upcoming.sort(key=lambda x: x["date"])
+                st.info(
+                    f"📅 **{len(added)} partido(s) adicional(es) encontrados vía cuotas** "
+                    f"que aún no figuran en football-data.org. Los equipos con historial "
+                    f"disponible recibirán predicciones del modelo."
+                )
 
     # ── Info de fuentes usadas (solo torneos) ─────────────────
     if is_tournament and not season_df.empty:
@@ -1817,6 +1862,63 @@ def main():
     with st.sidebar:
         if sorted_match_dates:
             st.divider()
+            # ── CSS del calendario: grid uniforme + glow verde en hover/selección ──
+            st.markdown(
+                """
+                <style>
+                [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+                    gap: 0.30rem !important;
+                    align-items: stretch !important;
+                }
+                [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="column"] {
+                    min-width: 0 !important;
+                    padding: 0 !important;
+                    display: flex !important;
+                    align-items: stretch !important;
+                }
+                [data-testid="stSidebar"] .stButton {
+                    width: 100% !important;
+                    margin: 0 !important;
+                }
+                [data-testid="stSidebar"] .stButton > button {
+                    width: 100% !important;
+                    min-height: 32px !important;
+                    height: 32px !important;
+                    padding: 0 2px !important;
+                    margin: 1px 0 !important;
+                    font-size: .70rem !important;
+                    line-height: 1 !important;
+                    border-radius: 8px !important;
+                    font-family: 'IBM Plex Mono', monospace !important;
+                    transition: transform .15s cubic-bezier(.2,.8,.2,1), box-shadow .18s ease, background .18s ease, color .18s ease, border-color .18s ease !important;
+                }
+                /* Glow verde al pasar el cursor sobre cualquier día */
+                [data-testid="stSidebar"] .stButton > button:hover {
+                    background: rgba(0,168,107,0.16) !important;
+                    border-color: #00A86B !important;
+                    color: #00A86B !important;
+                    box-shadow: 0 0 0 2px rgba(0,168,107,0.32), 0 4px 12px rgba(0,168,107,0.20) !important;
+                    transform: translateY(-1px) scale(1.04) !important;
+                    z-index: 2 !important;
+                }
+                /* Día seleccionado: glow verde permanente */
+                [data-testid="stSidebar"] .stButton > button[kind="primary"],
+                [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"] {
+                    background: linear-gradient(135deg,#00A86B,#00c97f) !important;
+                    border-color: #00A86B !important;
+                    color: #ffffff !important;
+                    font-weight: 700 !important;
+                    box-shadow: 0 0 0 2px rgba(0,168,107,0.45), 0 4px 14px rgba(0,168,107,0.35) !important;
+                }
+                [data-testid="stSidebar"] .stButton > button[kind="primary"]:hover,
+                [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"]:hover {
+                    box-shadow: 0 0 0 3px rgba(0,168,107,0.6), 0 6px 18px rgba(0,168,107,0.45) !important;
+                    transform: translateY(-1px) scale(1.05) !important;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True
+            )
             st.markdown(
                 '<div style="font-size:.72rem;font-weight:700;color:#64748b;'
                 'letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;'
@@ -1951,8 +2053,7 @@ def main():
 
             for gi, ((g_home, g_away, g_date), vbs) in enumerate(groups.items()):
                 try:
-                    g_dt = datetime.fromisoformat(g_date.replace("Z","+00:00"))
-                    g_dt_str = g_dt.strftime("%a %d/%m · %H:%M")
+                    g_dt_str = fmt_match_dt(g_date)
                 except Exception:
                     g_dt_str = g_date[:16]
 
@@ -2008,12 +2109,11 @@ def main():
             info  = match_map[m["id"]]
             p,bk  = info["p"], info["bk"]
             hctx,actx,alerts = info["hctx"],info["actx"],info["alerts"]
-            dt = datetime.fromisoformat(m["date"].replace("Z","+00:00"))
             suffix = f"  🎯 {len(info['vbets'])}" if info["vbets"] else ""
             suffix += "  ⚠️" if alerts else ""
             with st.expander(
                 f"{hctx['emoji']} **{m['home_name']}** vs **{m['away_name']}** {actx['emoji']} "
-                f"· {dt.strftime('%a %d/%m %H:%M')} UTC{suffix}", expanded=False):
+                f"· {fmt_match_dt(m['date'])}{suffix}", expanded=False):
                 col1,col2=st.columns(2)
                 col1.markdown(f"{ctx_badge_html(hctx)}", unsafe_allow_html=True)
                 col2.markdown(f"{ctx_badge_html(actx)}", unsafe_allow_html=True)
