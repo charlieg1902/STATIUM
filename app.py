@@ -1846,32 +1846,62 @@ def main():
                     st.session_state["cal_month"] = (cy, cm + 1)
                 st.rerun()
 
-            # Grid del mes actual
+            # Encabezado de días (L M X J V S D)
+            hdr_cols = st.columns(7)
+            for hc, dname in zip(hdr_cols, ["L","M","X","J","V","S","D"]):
+                hc.markdown(
+                    f'<div style="text-align:center;font-size:.58rem;color:#94a3b8;'
+                    f'font-family:\'IBM Plex Mono\',monospace">{dname}</div>',
+                    unsafe_allow_html=True
+                )
+
+            # Grid de días — clicables (tap para filtrar por esa fecha)
+            today = datetime.utcnow().date()
+            sel_d = st.session_state["sel_date"]
+            for week in cal_module.monthcalendar(cy, cm):
+                wcols = st.columns(7)
+                for wc, day in zip(wcols, week):
+                    if day == 0:
+                        wc.markdown("&nbsp;", unsafe_allow_html=True)
+                        continue
+                    ds = f"{cy}-{cm:02d}-{day:02d}"
+                    n  = match_dates_map.get(ds, 0)
+                    is_sel   = ds == sel_d
+                    is_today = ds == today.isoformat()
+                    if n:
+                        cap = f"{day} •" if not is_sel else f"✓ {day}"
+                        if wc.button(cap, key=f"cal_day_{ds}", use_container_width=True,
+                                     type="primary" if is_sel else "secondary"):
+                            st.session_state["sel_date"] = "all" if is_sel else ds
+                            st.rerun()
+                    else:
+                        ring = f"box-shadow:0 0 0 1.5px rgba(26,111,168,0.30);" if is_today else ""
+                        wc.markdown(
+                            f'<div style="text-align:center;color:#cbd5e1;font-size:.70rem;'
+                            f'padding:7px 0;border-radius:6px;{ring}font-family:\'IBM Plex Mono\',monospace">{day}</div>',
+                            unsafe_allow_html=True
+                        )
+
             st.markdown(
-                _sidebar_cal_html(cy, cm, match_dates_map, st.session_state["sel_date"]),
+                '<div style="display:flex;gap:10px;margin:8px 0 2px;flex-wrap:wrap">'
+                '<div style="display:flex;align-items:center;gap:4px;font-size:.60rem;color:#64748b">'
+                '<div style="width:8px;height:8px;border-radius:2px;border:1px solid rgba(0,168,107,0.45);'
+                'background:rgba(0,168,107,0.12)"></div>Con partidos · toca para filtrar</div></div>',
                 unsafe_allow_html=True
             )
 
-            # Selector de fecha (funcional)
-            date_opts = ["Todos"] + sorted_match_dates
-            sel_label = st.selectbox(
-                "Fecha",
-                date_opts,
-                index=0 if st.session_state["sel_date"] == "all"
-                      else (date_opts.index(st.session_state["sel_date"])
-                            if st.session_state["sel_date"] in date_opts else 0),
-                format_func=lambda d: "📅 Todos los partidos" if d == "Todos"
-                            else datetime.strptime(d, "%Y-%m-%d").strftime("%a %d/%m"),
-                label_visibility="collapsed",
-            )
-            new_sel = "all" if sel_label == "Todos" else sel_label
-            if new_sel != st.session_state["sel_date"]:
-                st.session_state["sel_date"] = new_sel
-                # Saltar al mes del partido seleccionado
-                if new_sel != "all":
-                    d_obj = datetime.strptime(new_sel, "%Y-%m-%d")
-                    st.session_state["cal_month"] = (d_obj.year, d_obj.month)
-                st.rerun()
+            # Botón para limpiar selección y ver todos los partidos
+            if sel_d != "all":
+                if st.button("✕ Ver todos los partidos", key="cal_clear", use_container_width=True):
+                    st.session_state["sel_date"] = "all"
+                    st.rerun()
+                else:
+                    st.markdown(
+                        f'<div style="text-align:center;font-size:.70rem;color:#00A86B;'
+                        f'font-weight:600;margin-top:2px;font-family:\'IBM Plex Mono\',monospace">'
+                        f'📅 Filtrando: {datetime.strptime(sel_d,"%Y-%m-%d").strftime("%a %d/%m")}</div>',
+                        unsafe_allow_html=True
+                    )
 
     # Aplicar filtro de fecha a la lista de próximos partidos y value bets
     sel_date = st.session_state.get("sel_date", "all")
@@ -1888,14 +1918,19 @@ def main():
     # ─── TAB 1: VALUE BETS ────────────────────────────────────
     with t1:
         st.markdown(f"### 🎯 Value Bets · {league_name}")
+        ALL_CONF    = ["Alta","Media","Baja"]
+        ALL_MARKETS = ["1 Local","X Empate","2 Visitante","Over 2.5","Under 2.5"]
         col_l, col_r = st.columns([1,1])
-        conf_filter   = col_l.multiselect("Confianza", ["Alta","Media","Baja"], default=["Alta","Media","Baja"])
-        market_filter = col_r.multiselect("Mercado",
-            ["1 Local","X Empate","2 Visitante","Over 2.5","Under 2.5"],
-            default=["1 Local","X Empate","2 Visitante","Over 2.5","Under 2.5"])
+        conf_filter   = col_l.multiselect("Confianza", ALL_CONF, default=ALL_CONF,
+                                           help="Si lo dejas vacío se muestran todos los niveles de confianza.")
+        market_filter = col_r.multiselect("Mercado", ALL_MARKETS, default=ALL_MARKETS,
+                                           help="Si lo dejas vacío se muestran todos los mercados.")
         st.markdown("---")
 
-        filtered = [v for v in all_vb_view if v["conf_label"] in conf_filter and v["label"] in market_filter]
+        # Filtro vacío = sin restricción (mostrar todo), no "ocultar todo"
+        conf_eff   = conf_filter if conf_filter else ALL_CONF
+        market_eff = market_filter if market_filter else ALL_MARKETS
+        filtered = [v for v in all_vb_view if v["conf_label"] in conf_eff and v["label"] in market_eff]
 
         if not filtered:
             st.info("No se detectaron value bets con estos criterios. Prueba bajando el EV mínimo.")
@@ -1907,13 +1942,48 @@ def main():
 
             st.markdown("<div style='margin-top:1.2rem'></div>", unsafe_allow_html=True)
 
-            for idx, vb in enumerate(filtered):
-                # Animated card
-                st.markdown(vb_card_html(vb, idx), unsafe_allow_html=True)
-                # Expandable analysis
-                with st.expander("📊 ¿Por qué este pick?", expanded=False):
-                    analysis = generate_analysis(vb, ratings)
-                    st.markdown(analysis)
+            # ── Agrupar picks por partido (orden = mejor EV primero) ──
+            from collections import OrderedDict
+            groups = OrderedDict()
+            for vb in filtered:
+                gkey = (vb["home"], vb["away"], vb["date"])
+                groups.setdefault(gkey, []).append(vb)
+
+            for gi, ((g_home, g_away, g_date), vbs) in enumerate(groups.items()):
+                try:
+                    g_dt = datetime.fromisoformat(g_date.replace("Z","+00:00"))
+                    g_dt_str = g_dt.strftime("%a %d/%m · %H:%M")
+                except Exception:
+                    g_dt_str = g_date[:16]
+
+                st.markdown(
+                    f'<div style="display:flex;align-items:baseline;justify-content:space-between;'
+                    f'flex-wrap:wrap;gap:8px;margin:{"6" if gi==0 else "22"}px 0 10px">'
+                    f'<div style="font-size:1.05rem;font-weight:700;color:{BRAND_DARK};'
+                    f'font-family:\'Space Grotesk\',sans-serif">⚽ {g_home} <span style="color:#94a3b8;font-weight:400">vs</span> {g_away}</div>'
+                    f'<div style="font-size:.74rem;color:#94a3b8;font-family:\'IBM Plex Mono\',monospace">'
+                    f'📅 {g_dt_str} &nbsp;·&nbsp; {len(vbs)} pick(s) detectado(s)</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+                col_picks, col_why = st.columns([3, 2])
+                with col_picks:
+                    for idx, vb in enumerate(vbs):
+                        st.markdown(vb_card_html(vb, idx), unsafe_allow_html=True)
+                with col_why:
+                    st.markdown(
+                        '<div style="font-size:.66rem;font-weight:700;color:#94a3b8;letter-spacing:.8px;'
+                        'text-transform:uppercase;margin:4px 0 8px;'
+                        'font-family:\'IBM Plex Mono\',monospace">📊 ¿Por qué estos picks?</div>',
+                        unsafe_allow_html=True
+                    )
+                    for idx, vb in enumerate(vbs):
+                        with st.expander(f"{vb['conf_icon']} {vb['label']} · cuota {vb['bk_odds']} · EV +{vb['ev']*100:.1f}%",
+                                         expanded=(idx == 0)):
+                            analysis = generate_analysis(vb, ratings)
+                            st.markdown(analysis)
+                st.markdown('<div class="grad-line" style="margin:14px 0 4px;opacity:.5"></div>', unsafe_allow_html=True)
 
             st.markdown("---")
             df_vb = pd.DataFrame(filtered)
