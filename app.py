@@ -7,6 +7,7 @@ from difflib import SequenceMatcher
 from datetime import datetime, timedelta, timezone
 import warnings, json, os, uuid, calendar as cal_module
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from supabase import create_client
 warnings.filterwarnings("ignore")
 
 # ═══════════════════════════════════════════════════════════
@@ -370,7 +371,11 @@ DECAY_RATE   = 0.010       # Ligas de club: peso ~0% a 1.5 años
 INTL_DECAY   = 0.0006      # Selecciones: peso ~64% a 2 años, ~41% a 3 años
 LATE_SEASON  = 5
 
-HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "picks_history.json")
+@st.cache_resource
+def get_supabase():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
 # ── Fuentes internacionales para el modelo WC ─────────────────
 # Pesos de competición: eliminatorias = 1.0, torneos mayores ≈ 0.90,
@@ -995,58 +1000,54 @@ def suggest_top_market(probs, bk):
 # TRACKER — PERSISTENCIA Y ESTADÍSTICAS
 # ═══════════════════════════════════════════════════════════
 def load_history():
-    if not os.path.exists(HISTORY_FILE): return []
     try:
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f: return json.load(f)
-    except Exception: return []
-
-def _save_history(history):
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2, ensure_ascii=False)
+        res = get_supabase().table("picks").select("*").order("created_at", desc=False).execute()
+        return res.data or []
+    except Exception:
+        return []
 
 def add_pick_to_history(home, away, league, market, odds, model_p, ev, stake, date_match, closing_odds=None):
-    history = load_history()
     co = round(float(closing_odds), 2) if closing_odds and float(closing_odds) > 1.0 else None
     clv = round((float(odds) / co - 1) * 100, 1) if co else None
     pick = {
-        "id":         str(uuid.uuid4())[:8],
-        "created_at": datetime.utcnow().isoformat(),
-        "date_match": date_match,
-        "home": home, "away": away,
+        "id":           str(uuid.uuid4())[:8],
+        "created_at":   datetime.utcnow().isoformat(),
+        "date_match":   date_match,
+        "home": home,   "away": away,
         "league": league, "market": market,
         "odds":         round(float(odds), 2),
         "closing_odds": co,
         "clv":          clv,
-        "model_p": round(float(model_p)*100, 1),
-        "ev":      round(float(ev)*100, 1),
-        "stake":   round(float(stake), 2) if stake else 0.0,
-        "result":  "pending",
-        "resolved_at": None, "pnl": None,
+        "model_p":      round(float(model_p)*100, 1),
+        "ev":           round(float(ev)*100, 1),
+        "stake":        round(float(stake), 2) if stake else 0.0,
+        "result":       "pending",
+        "resolved_at":  None, "pnl": None,
     }
-    history.append(pick)
-    _save_history(history)
+    get_supabase().table("picks").insert(pick).execute()
     return pick["id"]
 
 def resolve_pick(pick_id, result, stake=None, closing_odds=None):
     history = load_history()
-    for p in history:
-        if p["id"] == pick_id:
-            p["result"] = result
-            p["resolved_at"] = datetime.utcnow().isoformat()
-            if stake is not None: p["stake"] = round(float(stake), 2)
-            if result == "hit":   p["pnl"] = round(p["stake"] * (p["odds"] - 1), 2)
-            elif result == "miss": p["pnl"] = -p["stake"]
-            else:                  p["pnl"] = 0.0
-            if closing_odds and float(closing_odds) > 1.0:
-                co = round(float(closing_odds), 2)
-                p["closing_odds"] = co
-                p["clv"] = round((p["odds"] / co - 1) * 100, 1)
-            break
-    _save_history(history)
+    p = next((x for x in history if x["id"] == pick_id), None)
+    if not p:
+        return
+    stake_val = round(float(stake), 2) if stake is not None else p["stake"]
+    pnl = round(stake_val * (p["odds"] - 1), 2) if result == "hit" else -stake_val
+    update = {
+        "result":      result,
+        "resolved_at": datetime.utcnow().isoformat(),
+        "stake":       stake_val,
+        "pnl":         pnl,
+    }
+    if closing_odds and float(closing_odds) > 1.0:
+        co = round(float(closing_odds), 2)
+        update["closing_odds"] = co
+        update["clv"] = round((p["odds"] / co - 1) * 100, 1)
+    get_supabase().table("picks").update(update).eq("id", pick_id).execute()
 
 def delete_pick(pick_id):
-    history = [p for p in load_history() if p["id"] != pick_id]
-    _save_history(history)
+    get_supabase().table("picks").delete().eq("id", pick_id).execute()
 
 def get_streak(history):
     resolved = sorted(
