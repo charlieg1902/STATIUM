@@ -1004,15 +1004,19 @@ def _save_history(history):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2, ensure_ascii=False)
 
-def add_pick_to_history(home, away, league, market, odds, model_p, ev, stake, date_match):
+def add_pick_to_history(home, away, league, market, odds, model_p, ev, stake, date_match, closing_odds=None):
     history = load_history()
+    co = round(float(closing_odds), 2) if closing_odds and float(closing_odds) > 1.0 else None
+    clv = round((float(odds) / co - 1) * 100, 1) if co else None
     pick = {
         "id":         str(uuid.uuid4())[:8],
         "created_at": datetime.utcnow().isoformat(),
         "date_match": date_match,
         "home": home, "away": away,
         "league": league, "market": market,
-        "odds":    round(float(odds), 2),
+        "odds":         round(float(odds), 2),
+        "closing_odds": co,
+        "clv":          clv,
         "model_p": round(float(model_p)*100, 1),
         "ev":      round(float(ev)*100, 1),
         "stake":   round(float(stake), 2) if stake else 0.0,
@@ -1023,7 +1027,7 @@ def add_pick_to_history(home, away, league, market, odds, model_p, ev, stake, da
     _save_history(history)
     return pick["id"]
 
-def resolve_pick(pick_id, result, stake=None):
+def resolve_pick(pick_id, result, stake=None, closing_odds=None):
     history = load_history()
     for p in history:
         if p["id"] == pick_id:
@@ -1033,6 +1037,10 @@ def resolve_pick(pick_id, result, stake=None):
             if result == "hit":   p["pnl"] = round(p["stake"] * (p["odds"] - 1), 2)
             elif result == "miss": p["pnl"] = -p["stake"]
             else:                  p["pnl"] = 0.0
+            if closing_odds and float(closing_odds) > 1.0:
+                co = round(float(closing_odds), 2)
+                p["closing_odds"] = co
+                p["clv"] = round((p["odds"] / co - 1) * 100, 1)
             break
     _save_history(history)
 
@@ -1062,6 +1070,8 @@ def get_stats(history):
     hits    = sum(1 for p in resolved if p["result"]=="hit")
     pnl     = sum(p.get("pnl") or 0 for p in resolved)
     staked  = sum(p.get("stake") or 0 for p in resolved)
+    clv_picks = [p["clv"] for p in resolved if p.get("clv") is not None]
+    avg_clv = round(sum(clv_picks) / len(clv_picks), 1) if clv_picks else None
     return {
         "total":    len(resolved),
         "hits":     hits,
@@ -1070,6 +1080,8 @@ def get_stats(history):
         "roi":      round(pnl/staked*100, 1) if staked > 0 else 0.0,
         "pnl":      round(pnl, 2),
         "staked":   round(staked, 2),
+        "avg_clv":  avg_clv,
+        "n_clv":    len(clv_picks),
     }
 
 def streak_html(streak_count, streak_type):
@@ -2333,7 +2345,7 @@ def main():
         )
 
         # ── Stats row ──────────────────────────────────────
-        sc1, sc2, sc3, sc4 = st.columns(4)
+        sc1, sc2, sc3, sc4, sc5 = st.columns(5)
         streak_color = BRAND_GREEN if streak_type == "hit" else ("#ef4444" if streak_type == "miss" else "#94a3b8")
         sc1.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{streak_color}'>{streak_count}</div><div class='stat-card-label'>Racha activa</div></div>", unsafe_allow_html=True)
         sc2.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{BRAND_GREEN}'>{stats['win_rate']}%</div><div class='stat-card-label'>Win rate · {stats['hits']}H / {stats['misses']}M</div></div>", unsafe_allow_html=True)
@@ -2341,6 +2353,11 @@ def main():
         sc3.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{roi_color}'>{stats['roi']:+.1f}%</div><div class='stat-card-label'>ROI</div></div>", unsafe_allow_html=True)
         pnl_color = BRAND_GREEN if stats['pnl'] >= 0 else "#ef4444"
         sc4.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{pnl_color}'>{stats['pnl']:+.2f}</div><div class='stat-card-label'>P&L · Apostado {stats['staked']:.2f}</div></div>", unsafe_allow_html=True)
+        if stats.get("avg_clv") is not None:
+            clv_color = BRAND_GREEN if stats["avg_clv"] >= 0 else "#ef4444"
+            sc5.markdown(f"<div class='stat-card'><div class='stat-card-num' style='color:{clv_color}'>{stats['avg_clv']:+.1f}%</div><div class='stat-card-label'>CLV medio · {stats['n_clv']} picks</div></div>", unsafe_allow_html=True)
+        else:
+            sc5.markdown("<div class='stat-card'><div class='stat-card-num' style='color:#94a3b8'>—</div><div class='stat-card-label'>CLV medio</div></div>", unsafe_allow_html=True)
 
         st.markdown("<div style='margin-top:1.2rem'></div>", unsafe_allow_html=True)
 
@@ -2385,12 +2402,16 @@ def main():
                     ["1 Local","X Empate","2 Visitante","Over 2.5","Under 2.5"],
                     index=["1 Local","X Empate","2 Visitante","Over 2.5","Under 2.5"].index(sel_vb["label"]) if sel_vb else 0)
                 fc5, fc6, fc7 = st.columns(3)
-                odds_val   = fc5.number_input("Cuota", min_value=1.01, max_value=20.0,
+                odds_val   = fc5.number_input("Cuota entrada", min_value=1.01, max_value=20.0,
                                               value=float(sel_vb["bk_odds"]) if sel_vb else 2.0, step=0.05)
                 stake_val  = fc6.number_input("Stake (u.)", min_value=0.0, value=10.0, step=1.0)
                 result_val = fc7.selectbox("Resultado", ["Pendiente","Hit ✅","Miss ❌"])
-                date_val   = st.date_input("Fecha del partido",
-                                           value=datetime.fromisoformat(sel_vb["date"].replace("Z","+00:00")).date() if sel_vb else datetime.utcnow().date())
+                fc8, fc9 = st.columns(2)
+                closing_val = fc8.number_input("Cuota cierre (opcional)",
+                                               min_value=0.0, max_value=20.0, value=0.0, step=0.05,
+                                               help="Cuota justo antes del partido. Permite calcular CLV.")
+                date_val   = fc9.date_input("Fecha del partido",
+                                            value=datetime.fromisoformat(sel_vb["date"].replace("Z","+00:00")).date() if sel_vb else datetime.utcnow().date())
 
                 submitted = st.form_submit_button("💾 Guardar pick", use_container_width=True)
                 if submitted:
@@ -2400,19 +2421,20 @@ def main():
                         result_map = {"Pendiente":"pending","Hit ✅":"hit","Miss ❌":"miss"}
                         model_p_val = sel_vb["model_p"] if sel_vb else 0.5
                         ev_val      = sel_vb["ev"]      if sel_vb else 0.0
+                        co = closing_val if closing_val > 1.0 else None
                         add_pick_to_history(
                             home=home_val, away=away_val, league=league_val,
                             market=market_val, odds=odds_val,
                             model_p=model_p_val, ev=ev_val,
                             stake=stake_val,
                             date_match=date_val.isoformat(),
+                            closing_odds=co,
                         )
-                        # If result already known, resolve immediately
                         r = result_map[result_val]
                         if r != "pending":
                             new_hist = load_history()
                             if new_hist:
-                                resolve_pick(new_hist[-1]["id"], r, stake_val)
+                                resolve_pick(new_hist[-1]["id"], r, stake_val, closing_odds=co)
                         st.success(f"✅ Pick guardado: {home_val} vs {away_val} · {market_val} @ {odds_val}")
                         st.rerun()
 
@@ -2421,17 +2443,23 @@ def main():
             st.markdown(f"#### ⏳ Pendientes de resolución ({len(pending_picks)})")
             for p in sorted(pending_picks, key=lambda x: x.get("date_match",""), reverse=True):
                 with st.container():
-                    pc1, pc2, pc3, pc4 = st.columns([3,1,1,1])
+                    pc1, pc_co, pc2, pc3, pc4 = st.columns([3, 1.2, 0.9, 0.9, 0.6])
                     pc1.markdown(
                         f"**{p['home']} vs {p['away']}**  \n"
                         f"<span style='font-size:.75rem;color:#64748b;font-family:IBM Plex Mono'>"
                         f"{p['market']} @ {p['odds']} · EV +{p['ev']}% · Stake {p['stake']}</span>",
                         unsafe_allow_html=True
                     )
+                    close_odds_val = pc_co.number_input(
+                        "Cuota cierre", min_value=0.0, max_value=20.0, value=0.0, step=0.05,
+                        key=f"co_{p['id']}", label_visibility="collapsed",
+                        help="Cuota de cierre para calcular CLV (opcional)",
+                    )
+                    co_input = close_odds_val if close_odds_val > 1.0 else None
                     if pc2.button("✅ Hit",  key=f"hit_{p['id']}"):
-                        resolve_pick(p["id"], "hit",  p["stake"]); st.rerun()
+                        resolve_pick(p["id"], "hit",  p["stake"], closing_odds=co_input); st.rerun()
                     if pc3.button("❌ Miss", key=f"miss_{p['id']}"):
-                        resolve_pick(p["id"], "miss", p["stake"]); st.rerun()
+                        resolve_pick(p["id"], "miss", p["stake"], closing_odds=co_input); st.rerun()
                     if pc4.button("🗑️",     key=f"del_{p['id']}"):
                         delete_pick(p["id"]); st.rerun()
             st.markdown("---")
@@ -2444,7 +2472,9 @@ def main():
             df_hist["P&L"]       = df_hist["pnl"].apply(lambda x: f"{x:+.2f}" if x is not None else "—")
             df_hist["ROI pick"]  = df_hist.apply(
                 lambda r: f"{(r['pnl']/r['stake']*100):+.1f}%" if r.get('stake') and r['stake']>0 else "—", axis=1)
-            show_cols = ["home","away","league","market","odds","model_p","ev","stake","Resultado","P&L","ROI pick"]
+            df_hist["CLV"]       = df_hist.apply(
+                lambda r: f"{r['clv']:+.1f}%" if r.get("clv") is not None else "—", axis=1)
+            show_cols = ["home","away","league","market","odds","model_p","ev","stake","Resultado","P&L","ROI pick","CLV"]
             rename    = {"home":"Local","away":"Visitante","league":"Liga","market":"Mercado",
                          "odds":"Cuota","model_p":"P.Modelo%","ev":"EV%","stake":"Stake"}
             st.dataframe(
