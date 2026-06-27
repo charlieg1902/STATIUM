@@ -6,6 +6,7 @@ from scipy.stats import poisson
 from difflib import SequenceMatcher
 from datetime import datetime, timedelta, timezone
 import warnings, json, os, uuid, calendar as cal_module
+from concurrent.futures import ThreadPoolExecutor, as_completed
 warnings.filterwarnings("ignore")
 
 # ═══════════════════════════════════════════════════════════
@@ -482,39 +483,28 @@ def fetch_intl_matches(fd_key):
     Los países sede (USA / Canadá / México) reciben peso 1.0 en sus partidos
     de GC / CNL / WCF porque no tuvieron eliminatorias.
     """
-    all_rows   = []
-    seen_ids   = set()
-
     def _is_host(name):
         return any(h in name.lower() for h in HOST_NATIONS)
 
-    for fd_code, base_w, label in INTL_SOURCES:
-        data = _fd_get(fd_key, f"/competitions/{fd_code}/matches",
-                       {"status": "FINISHED"})
+    def _fetch_one(fd_code, base_w, label):
+        data = _fd_get(fd_key, f"/competitions/{fd_code}/matches", {"status": "FINISHED"})
         if not data:
-            continue
-        matches = data.get("matches", [])
-        for m in matches:
-            mid = m.get("id")
-            if mid in seen_ids:
-                continue
-            seen_ids.add(mid)
+            return []
+        rows = []
+        for m in data.get("matches", []):
             ft = m.get("score", {}).get("fullTime", {})
             if ft.get("home") is None:
                 continue
-
             home_name = m["homeTeam"]["name"]
             away_name = m["awayTeam"]["name"]
-
-            # Países sede: sus partidos no-eliminatorias valen igual que eliminatoria
             if fd_code in ("GC", "CNL", "WCF", "CA", "NL") and (
                 _is_host(home_name) or _is_host(away_name)
             ):
                 comp_w = 1.0
             else:
                 comp_w = base_w
-
-            all_rows.append({
+            rows.append({
+                "_mid":       m.get("id"),
                 "date":       m["utcDate"],
                 "home_id":    m["homeTeam"]["id"],
                 "home_name":  home_name,
@@ -526,6 +516,18 @@ def fetch_intl_matches(fd_key):
                 "comp_code":   fd_code,
                 "comp_label":  label,
             })
+        return rows
+
+    all_rows = []
+    seen_ids = set()
+    with ThreadPoolExecutor(max_workers=len(INTL_SOURCES)) as ex:
+        futures = {ex.submit(_fetch_one, c, w, l): c for c, w, l in INTL_SOURCES}
+        for fut in as_completed(futures):
+            for row in (fut.result() or []):
+                mid = row.pop("_mid")
+                if mid not in seen_ids:
+                    seen_ids.add(mid)
+                    all_rows.append(row)
 
     if not all_rows:
         return pd.DataFrame()
@@ -806,6 +808,16 @@ def build_ratings(df, decay_rate=None, intl_mode=False):
         }
     return ratings, avg_h, avg_a
 
+DC_RHO = -0.13  # Dixon-Coles: corrige sobreestimación Poisson en {0-0,1-0,0-1,1-1}
+
+def _dc_tau(x, y, lam_h, lam_a, rho):
+    """Factor de corrección Dixon-Coles para marcadores bajos."""
+    if   x == 0 and y == 0: return 1 - lam_h * lam_a * rho
+    elif x == 0 and y == 1: return 1 + lam_h * rho
+    elif x == 1 and y == 0: return 1 + lam_a * rho
+    elif x == 1 and y == 1: return 1 - rho
+    else:                   return 1.0
+
 def match_probs(home_id, away_id, ratings, avg_h, avg_a):
     if home_id not in ratings or away_id not in ratings: return None
     hr,ar = ratings[home_id], ratings[away_id]
@@ -813,6 +825,11 @@ def match_probs(home_id, away_id, ratings, avg_h, avg_a):
     lam_a=float(np.clip(ar["att_a"]*hr["def_h"]*avg_a,0.40,4.5))
     G=8
     M=np.outer([poisson.pmf(i,lam_h) for i in range(G)],[poisson.pmf(i,lam_a) for i in range(G)])
+    # Corrección Dixon-Coles: ajusta probabilidades de marcadores 0-0, 1-0, 0-1, 1-1
+    for i in range(2):
+        for j in range(2):
+            M[i][j] *= _dc_tau(i, j, lam_h, lam_a, DC_RHO)
+    M /= M.sum()  # renormalizar tras la corrección
     hw=float(np.sum(np.tril(M,-1))); dr=float(np.sum(np.diag(M))); aw=float(np.sum(np.triu(M,1)))
     o25=float(sum(M[i][j] for i in range(G) for j in range(G) if i+j>2))
     btts=float((1-poisson.pmf(0,lam_h))*(1-poisson.pmf(0,lam_a)))
