@@ -733,6 +733,7 @@ def match_alerts(home_ctx, away_ctx, matchday, league_cfg, home_name="Local", aw
 # ═══════════════════════════════════════════════════════════
 # MODELO POISSON
 # ═══════════════════════════════════════════════════════════
+@st.cache_data(ttl=3600, show_spinner=False)
 def build_ratings(df, decay_rate=None, intl_mode=False):
     """
     Construye ratings de ataque/defensa con shrinkage bayesiano.
@@ -910,6 +911,12 @@ def best_odds_for(om):
                         else: best["u25"]=max(best["u25"],pr)
     return best
 
+def kelly_criterion(model_p, bk_odds, fraction=0.25):
+    b = bk_odds - 1
+    q = 1 - model_p
+    k = (model_p * b - q) / b
+    return round(max(0.0, k) * fraction * 100, 1)
+
 def conf_info(edge):
     if   edge<=0.08: return "Alta",  "high",  "🟢","ev-high","conf-high"
     elif edge<=0.13: return "Media", "medium","🟡","ev-medium","conf-medium"
@@ -934,6 +941,7 @@ def detect_value_bets(probs, bk, home_name, away_name, ev_threshold):
                       "edge":round(edge,4),"bk_odds":bk_odd,"ev":round(ev,4),
                       "conf_label":cl,"conf_key":ck,"conf_icon":ci,
                       "ev_css":ev_css,"conf_css":conf_css,
+                      "kelly":kelly_criterion(model_p, bk_odd),
                       "home":home_name,"away":away_name})
     return found
 
@@ -1593,6 +1601,8 @@ def vb_card_html(vb, idx=0):
         f'<div class="vb-detail-item"><span class="vb-detail-label">Edge</span><span class="vb-detail-val green">+{edge_pp:.1f}pp</span></div>'
         f'<div class="vb-detail-item"><span class="vb-detail-label">xG Local</span><span class="vb-detail-val blue">{xg_h}</span></div>'
         f'<div class="vb-detail-item"><span class="vb-detail-label">xG Visit.</span><span class="vb-detail-val blue">{xg_a}</span></div>'
+        f'<div class="vb-detail-item"><span class="vb-detail-label">Kelly 25%</span>'
+        f'<span class="vb-detail-val green">🎯 {vb.get("kelly", 0):.1f}% · {round(vb.get("kelly", 0) / 100 * st.session_state.get("bankroll", 100), 1)}u</span></div>'
         f'</div>'
     )
 
@@ -1739,6 +1749,9 @@ def main():
             format_func=lambda n: f"{n}  ✨" if LEAGUES[n].get("featured")
                          else f"{n}  · receso" if LEAGUES[n].get("off_season") else n,
         )
+        if st.session_state.get("_last_league") != league_name:
+            st.session_state["sel_date"] = "all"
+            st.session_state["_last_league"] = league_name
         lc = LEAGUES[league_name]
         if lc.get("off_season") and not lc.get("is_tournament"):
             st.markdown(
@@ -1755,6 +1768,9 @@ def main():
         days_ahead  = 90 if lc.get("is_tournament") else 21
         ev_min_pct  = st.slider("🎯 EV mínimo (%)", 2, 12, 4)
         ev_threshold = ev_min_pct / 100
+        bankroll = st.number_input("💰 Bankroll (u.)", min_value=0.0, value=100.0, step=10.0,
+                                   help="Tu bankroll total. Kelly 25% te dirá cuántas unidades apostar.")
+        st.session_state["bankroll"] = bankroll
         st.divider()
         if st.button("🔄 Actualizar datos", use_container_width=True):
             st.cache_data.clear(); st.rerun()
