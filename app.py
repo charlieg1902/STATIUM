@@ -625,7 +625,7 @@ def upcoming_from_odds(odds_list, season_df, days_ahead=60):
 @st.cache_data(ttl=7200, show_spinner=False)
 def fetch_odds(odds_key, sport_key):
     data = _odds_get(odds_key, f"/sports/{sport_key}/odds/",
-                     {"regions":"eu","markets":"h2h,totals","oddsFormat":"decimal"})
+                     {"regions":"eu","markets":"h2h,totals,btts","oddsFormat":"decimal"})
     return data if isinstance(data, list) else []
 
 # ═══════════════════════════════════════════════════════════
@@ -836,14 +836,22 @@ def match_probs(home_id, away_id, ratings, avg_h, avg_a):
             M[i][j] *= _dc_tau(i, j, lam_h, lam_a, DC_RHO)
     M /= M.sum()  # renormalizar tras la corrección
     hw=float(np.sum(np.tril(M,-1))); dr=float(np.sum(np.diag(M))); aw=float(np.sum(np.triu(M,1)))
+    o15=float(sum(M[i][j] for i in range(G) for j in range(G) if i+j>1))
     o25=float(sum(M[i][j] for i in range(G) for j in range(G) if i+j>2))
+    o35=float(sum(M[i][j] for i in range(G) for j in range(G) if i+j>3))
     btts=float((1-poisson.pmf(0,lam_h))*(1-poisson.pmf(0,lam_a)))
     f=lambda p: round(1/p,2) if p>0.01 else 99.0
     return {"lam_h":round(lam_h,2),"lam_a":round(lam_a,2),
             "home_win":round(hw,4),"draw":round(dr,4),"away_win":round(aw,4),
-            "over25":round(o25,4),"under25":round(1-o25,4),"btts":round(btts,4),
+            "over15":round(o15,4),"under15":round(1-o15,4),
+            "over25":round(o25,4),"under25":round(1-o25,4),
+            "over35":round(o35,4),"under35":round(1-o35,4),
+            "btts":round(btts,4),"no_btts":round(1-btts,4),
             "fair_1":f(hw),"fair_x":f(dr),"fair_2":f(aw),
-            "fair_o25":f(o25),"fair_u25":f(1-o25),"fair_btts":f(btts)}
+            "fair_o15":f(o15),"fair_u15":f(1-o15),
+            "fair_o25":f(o25),"fair_u25":f(1-o25),
+            "fair_o35":f(o35),"fair_u35":f(1-o35),
+            "fair_btts":f(btts),"fair_no_btts":f(1-btts)}
 
 def team_form(df, team_id, n=6):
     hm=df[df["home_id"]==team_id][["date","home_goals","away_goals"]].rename(columns={"home_goals":"gf","away_goals":"gc"}); hm["v"]="H"
@@ -914,7 +922,7 @@ def find_odds_match(fd_home, fd_away, fd_date_str, odds_list):
     return best
 
 def best_odds_for(om):
-    best={"h2h_1":0,"h2h_x":0,"h2h_2":0,"o25":0,"u25":0}
+    best={"h2h_1":0,"h2h_x":0,"h2h_2":0,"o15":0,"u15":0,"o25":0,"u25":0,"o35":0,"u35":0,"btts_yes":0,"btts_no":0}
     if not om: return best
     ht,at=om.get("home_team",""),om.get("away_team","")
     for bk in om.get("bookmakers",[]):
@@ -928,9 +936,21 @@ def best_odds_for(om):
             elif mkt["key"]=="totals":
                 for oc in mkt.get("outcomes",[]):
                     pt,pr=float(oc.get("point",0)),float(oc.get("price",0))
-                    if abs(pt-2.5)<0.01:
-                        if oc.get("name","").lower()=="over": best["o25"]=max(best["o25"],pr)
-                        else: best["u25"]=max(best["u25"],pr)
+                    nm=oc.get("name","").lower()
+                    if   abs(pt-1.5)<0.01:
+                        if nm=="over":  best["o15"]=max(best["o15"],pr)
+                        else:           best["u15"]=max(best["u15"],pr)
+                    elif abs(pt-2.5)<0.01:
+                        if nm=="over":  best["o25"]=max(best["o25"],pr)
+                        else:           best["u25"]=max(best["u25"],pr)
+                    elif abs(pt-3.5)<0.01:
+                        if nm=="over":  best["o35"]=max(best["o35"],pr)
+                        else:           best["u35"]=max(best["u35"],pr)
+            elif mkt["key"] in ("btts","both_teams_to_score"):
+                for oc in mkt.get("outcomes",[]):
+                    p,n=float(oc.get("price",0)),oc.get("name","").lower()
+                    if "yes" in n: best["btts_yes"]=max(best["btts_yes"],p)
+                    elif "no" in n: best["btts_no"]=max(best["btts_no"],p)
     return best
 
 def kelly_criterion(model_p, bk_odds, fraction=0.25):
@@ -940,17 +960,26 @@ def kelly_criterion(model_p, bk_odds, fraction=0.25):
     return round(max(0.0, k) * fraction * 100, 1)
 
 def conf_info(edge):
-    if   edge<=0.08: return "Alta",  "high",  "🟢","ev-high","conf-high"
-    elif edge<=0.13: return "Media", "medium","🟡","ev-medium","conf-medium"
+    # Mayor edge = más valor detectado = mayor confianza
+    if   edge>=0.12: return "Alta",  "high",  "🟢","ev-high","conf-high"
+    elif edge>=0.07: return "Media", "medium","🟡","ev-medium","conf-medium"
     else:            return "Baja",  "low",   "🟠","ev-low","conf-low"
 
 def detect_value_bets(probs, bk, home_name, away_name, ev_threshold):
     if not probs: return []
-    checks=[("1 Local",probs["home_win"],bk["h2h_1"]),
-            ("X Empate",probs["draw"],bk["h2h_x"]),
-            ("2 Visitante",probs["away_win"],bk["h2h_2"]),
-            ("Over 2.5",probs["over25"],bk["o25"]),
-            ("Under 2.5",probs["under25"],bk["u25"])]
+    checks=[
+        ("1 Local",       probs["home_win"],  bk["h2h_1"]),
+        ("X Empate",      probs["draw"],       bk["h2h_x"]),
+        ("2 Visitante",   probs["away_win"],   bk["h2h_2"]),
+        ("Over 1.5",      probs["over15"],     bk["o15"]),
+        ("Under 1.5",     probs["under15"],    bk["u15"]),
+        ("Over 2.5",      probs["over25"],     bk["o25"]),
+        ("Under 2.5",     probs["under25"],    bk["u25"]),
+        ("Over 3.5",      probs["over35"],     bk["o35"]),
+        ("Under 3.5",     probs["under35"],    bk["u35"]),
+        ("BTTS Sí",       probs["btts"],       bk["btts_yes"]),
+        ("BTTS No",       probs["no_btts"],    bk["btts_no"]),
+    ]
     found=[]
     for label,model_p,bk_odd in checks:
         if bk_odd<MIN_ODDS or bk_odd>MAX_ODDS: continue
