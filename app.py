@@ -336,6 +336,16 @@ st.markdown(f"""
 # ═══════════════════════════════════════════════════════════
 FD_BASE   = "https://api.football-data.org/v4"
 ODDS_BASE = "https://api.the-odds-api.com/v4"
+FDCO_BASE = "https://www.football-data.co.uk/mmz4281"
+
+# Códigos de football-data.co.uk por liga (fd_code → fdco_code)
+FDCO_LEAGUES = {
+    "PL":  "E0",   # Premier League
+    "PD":  "SP1",  # La Liga
+    "SA":  "I1",   # Serie A
+    "BL1": "D1",   # Bundesliga
+    "FL1": "F1",   # Ligue 1
+}
 
 # ── Hora local del usuario: Perú (America/Lima) — UTC-5 todo el año, sin DST ──
 PERU_OFFSET = timedelta(hours=-5)
@@ -476,6 +486,97 @@ def fetch_standings(fd_key, fd_code):
     if rr_rows:
         return pd.DataFrame(rr_rows)
     return pd.DataFrame()
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_historical_seasons(fd_code, n_seasons=2):
+    """
+    Descarga hasta n_seasons temporadas históricas desde football-data.co.uk (gratis).
+    Devuelve DataFrame con columnas de goles + corners + tiros para uso futuro.
+    """
+    league_code = FDCO_LEAGUES.get(fd_code)
+    if not league_code:
+        return pd.DataFrame()
+
+    now = datetime.utcnow()
+    sy_current = now.year if now.month >= 7 else now.year - 1
+
+    all_parts = []
+    for i in range(1, n_seasons + 1):
+        sy = sy_current - i
+        ey = sy + 1
+        season = f"{str(sy)[-2:]}{str(ey)[-2:]}"
+        url = f"{FDCO_BASE}/{season}/{league_code}.csv"
+        try:
+            df = pd.read_csv(url)
+            needed = {"FTHG", "FTAG", "HomeTeam", "AwayTeam", "Date"}
+            if not needed.issubset(df.columns):
+                continue
+            df = df.dropna(subset=["FTHG", "FTAG", "HomeTeam", "AwayTeam", "Date"])
+            df["home_goals"]    = df["FTHG"].astype(int)
+            df["away_goals"]    = df["FTAG"].astype(int)
+            df["home_name_raw"] = df["HomeTeam"].astype(str).str.strip()
+            df["away_name_raw"] = df["AwayTeam"].astype(str).str.strip()
+            df["date"]          = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce").dt.strftime("%Y-%m-%dT12:00:00Z")
+            df = df.dropna(subset=["date"])
+            for col, key in [("home_corners","HC"),("away_corners","AC"),
+                              ("home_shots","HS"),("away_shots","AS"),
+                              ("home_shots_ot","HST"),("away_shots_ot","AST")]:
+                df[col] = pd.to_numeric(df[key], errors="coerce") if key in df.columns else np.nan
+            keep = ["date","home_name_raw","away_name_raw","home_goals","away_goals",
+                    "home_corners","away_corners","home_shots","away_shots","home_shots_ot","away_shots_ot"]
+            all_parts.append(df[keep])
+        except Exception:
+            continue
+
+    if not all_parts:
+        return pd.DataFrame()
+    return pd.concat(all_parts, ignore_index=True)
+
+def enrich_with_history(season_df, hist_df):
+    """
+    Añade partidos históricos al DataFrame de la temporada actual.
+    Hace fuzzy match de nombres de equipos del CSV histórico contra los IDs del API.
+    """
+    if hist_df.empty or season_df.empty:
+        return season_df
+
+    name_map = {}
+    for _, row in season_df.iterrows():
+        name_map[row["home_name"].lower().strip()] = (row["home_id"], row["home_name"])
+        name_map[row["away_name"].lower().strip()] = (row["away_id"], row["away_name"])
+
+    def lookup(raw):
+        q = raw.lower().strip()
+        if q in name_map:
+            return name_map[q]
+        best_s, best_k = 0, None
+        for key in name_map:
+            s = _sim(q, key)
+            if s > best_s:
+                best_s, best_k = s, key
+        return name_map[best_k] if best_s >= 0.65 else (None, None)
+
+    rows = []
+    for _, row in hist_df.iterrows():
+        h_id, h_name = lookup(row["home_name_raw"])
+        a_id, a_name = lookup(row["away_name_raw"])
+        if h_id is None or a_id is None:
+            continue
+        rows.append({
+            "date": row["date"],
+            "home_id": h_id, "home_name": h_name,
+            "away_id": a_id, "away_name": a_name,
+            "home_goals": int(row["home_goals"]),
+            "away_goals": int(row["away_goals"]),
+        })
+
+    if not rows:
+        return season_df
+
+    combined = pd.concat([season_df, pd.DataFrame(rows)], ignore_index=True)
+    combined.drop_duplicates(subset=["date","home_id","away_id"], keep="first", inplace=True)
+    combined.sort_values("date", ascending=False, inplace=True)
+    return combined.reset_index(drop=True)
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_intl_matches(fd_key):
@@ -1840,7 +1941,9 @@ def main():
         if is_tournament:
             season_df = fetch_intl_matches(FD_KEY)
         else:
-            season_df = fetch_season_matches(FD_KEY, lc["fd"])
+            season_df    = fetch_season_matches(FD_KEY, lc["fd"])
+            hist_df      = fetch_historical_seasons(lc["fd"], n_seasons=2)
+            season_df    = enrich_with_history(season_df, hist_df)
         standings_df = fetch_standings(FD_KEY, lc["fd"])
         upcoming     = fetch_upcoming_matches(FD_KEY, lc["fd"], days_ahead)
         odds_list    = fetch_odds(ODDS_KEY, lc["odds"])
