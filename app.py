@@ -557,26 +557,34 @@ def enrich_with_history(season_df, hist_df):
         return name_map[best_k] if best_s >= 0.65 else (None, None)
 
     rows = []
+    stat_rows = []
+    extra_cols = ["home_corners","away_corners","home_shots","away_shots","home_shots_ot","away_shots_ot"]
     for _, row in hist_df.iterrows():
         h_id, h_name = lookup(row["home_name_raw"])
         a_id, a_name = lookup(row["away_name_raw"])
         if h_id is None or a_id is None:
             continue
-        rows.append({
+        base = {
             "date": row["date"],
             "home_id": h_id, "home_name": h_name,
             "away_id": a_id, "away_name": a_name,
             "home_goals": int(row["home_goals"]),
             "away_goals": int(row["away_goals"]),
-        })
+        }
+        rows.append(base)
+        stat_row = {**base}
+        for col in extra_cols:
+            stat_row[col] = row.get(col, np.nan)
+        stat_rows.append(stat_row)
 
     if not rows:
-        return season_df
+        return season_df, pd.DataFrame()
 
     combined = pd.concat([season_df, pd.DataFrame(rows)], ignore_index=True)
     combined.drop_duplicates(subset=["date","home_id","away_id"], keep="first", inplace=True)
     combined.sort_values("date", ascending=False, inplace=True)
-    return combined.reset_index(drop=True)
+    hist_mapped = pd.DataFrame(stat_rows)
+    return combined.reset_index(drop=True), hist_mapped
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_intl_matches(fd_key):
@@ -726,7 +734,7 @@ def upcoming_from_odds(odds_list, season_df, days_ahead=60):
 @st.cache_data(ttl=7200, show_spinner=False)
 def fetch_odds(odds_key, sport_key):
     data = _odds_get(odds_key, f"/sports/{sport_key}/odds/",
-                     {"regions":"eu","markets":"h2h,totals,btts","oddsFormat":"decimal"})
+                     {"regions":"eu","markets":"h2h,totals,btts,bookie_corners","oddsFormat":"decimal"})
     return data if isinstance(data, list) else []
 
 # ═══════════════════════════════════════════════════════════
@@ -914,6 +922,66 @@ def build_ratings(df, decay_rate=None, intl_mode=False):
         }
     return ratings, avg_h, avg_a
 
+def build_stat_ratings(df, home_col, away_col, decay_rate=0.008, min_games=4):
+    """Ratings genéricos de ataque/defensa para corners, tiros o tiros al arco."""
+    df = df.dropna(subset=[home_col, away_col, "home_id", "away_id"]).copy()
+    if len(df) < 10:
+        avg_h = float(df[home_col].mean()) if len(df) > 0 else 5.0
+        avg_a = float(df[away_col].mean()) if len(df) > 0 else 4.5
+        return {}, avg_h, avg_a
+
+    df["date_parsed"] = pd.to_datetime(df["date"], utc=True, errors="coerce")
+    df = df.dropna(subset=["date_parsed"])
+    now = pd.Timestamp.now(tz="UTC")
+    df["days_ago"] = (now - df["date_parsed"]).dt.days.clip(lower=0)
+    df["w"] = np.exp(-decay_rate * df["days_ago"])
+
+    avg_h = float(np.average(df[home_col].values, weights=df["w"].values))
+    avg_a = float(np.average(df[away_col].values, weights=df["w"].values))
+    if avg_h == 0 or avg_a == 0:
+        return {}, 5.0, 4.5
+
+    K = 6
+    ratings = {}
+    for tid in set(df["home_id"]) | set(df["away_id"]):
+        hm = df[df["home_id"] == tid]
+        am = df[df["away_id"] == tid]
+        n = len(hm) + len(am)
+        if n < min_games:
+            continue
+        def wavg(vals, wts, fb=1.0):
+            return float(np.average(vals, weights=wts)) if (len(vals) > 0 and wts.sum() > 0) else fb
+        n_eff = min(n, 40)
+        raw_att_h = wavg((hm[home_col] / avg_h).values, hm["w"].values) if len(hm) >= 2 else 1.0
+        raw_att_a = wavg((am[away_col] / avg_a).values, am["w"].values) if len(am) >= 2 else 1.0
+        raw_def_h = wavg((hm[away_col] / avg_a).values, hm["w"].values) if len(hm) >= 2 else 1.0
+        raw_def_a = wavg((am[home_col] / avg_h).values, am["w"].values) if len(am) >= 2 else 1.0
+        ratings[tid] = {
+            "att_h": (n_eff * raw_att_h + K) / (n_eff + K),
+            "att_a": (n_eff * raw_att_a + K) / (n_eff + K),
+            "def_h": (n_eff * raw_def_h + K) / (n_eff + K),
+            "def_a": (n_eff * raw_def_a + K) / (n_eff + K),
+            "n": n,
+        }
+    return ratings, avg_h, avg_a
+
+def stat_ou_probs(home_id, away_id, ratings, avg_h, avg_a, lines, clip=(0.5, 25.0)):
+    """Calcula probabilidades Over/Under para líneas dadas (corners, tiros, etc.)."""
+    if home_id not in ratings or away_id not in ratings:
+        return None
+    hr, ar = ratings[home_id], ratings[away_id]
+    lam_h = float(np.clip(hr["att_h"] * ar["def_a"] * avg_h, clip[0], clip[1]))
+    lam_a = float(np.clip(ar["att_a"] * hr["def_h"] * avg_a, clip[0], clip[1]))
+    lam   = lam_h + lam_a
+    max_k = max(int(lam * 4) + 5, 40)
+    result = {"lam_h": round(lam_h, 1), "lam_a": round(lam_a, 1), "lam_total": round(lam, 1)}
+    for line in lines:
+        over_p = float(sum(poisson.pmf(k, lam) for k in range(int(line) + 1, max_k)))
+        key = str(line).replace(".", "_")
+        result[f"o{key}"] = round(over_p, 4)
+        result[f"u{key}"] = round(1 - over_p, 4)
+    return result
+
 DC_RHO = -0.13  # Dixon-Coles: corrige sobreestimación Poisson en {0-0,1-0,0-1,1-1}
 
 def _dc_tau(x, y, lam_h, lam_a, rho):
@@ -1023,7 +1091,9 @@ def find_odds_match(fd_home, fd_away, fd_date_str, odds_list):
     return best
 
 def best_odds_for(om):
-    best={"h2h_1":0,"h2h_x":0,"h2h_2":0,"o15":0,"u15":0,"o25":0,"u25":0,"o35":0,"u35":0,"btts_yes":0,"btts_no":0}
+    best={"h2h_1":0,"h2h_x":0,"h2h_2":0,"o15":0,"u15":0,"o25":0,"u25":0,"o35":0,"u35":0,
+          "btts_yes":0,"btts_no":0,
+          "c85":0,"c95":0,"c105":0,"c115":0,"uc85":0,"uc95":0,"uc105":0,"uc115":0}
     if not om: return best
     ht,at=om.get("home_team",""),om.get("away_team","")
     for bk in om.get("bookmakers",[]):
@@ -1052,6 +1122,17 @@ def best_odds_for(om):
                     p,n=float(oc.get("price",0)),oc.get("name","").lower()
                     if "yes" in n: best["btts_yes"]=max(best["btts_yes"],p)
                     elif "no" in n: best["btts_no"]=max(best["btts_no"],p)
+            elif mkt["key"] in ("bookie_corners","corners","total_corners"):
+                for oc in mkt.get("outcomes",[]):
+                    pt = float(oc.get("point", 0))
+                    pr = float(oc.get("price", 0))
+                    nm = oc.get("name","").lower()
+                    line_map = {8.5:("c85","uc85"), 9.5:("c95","uc95"),
+                                10.5:("c105","uc105"), 11.5:("c115","uc115")}
+                    if pt in line_map:
+                        ok, uk = line_map[pt]
+                        if nm == "over":  best[ok]  = max(best[ok],  pr)
+                        elif nm == "under": best[uk] = max(best[uk], pr)
     return best
 
 def kelly_criterion(model_p, bk_odds, fraction=0.25):
@@ -1066,7 +1147,7 @@ def conf_info(edge):
     elif edge>=0.07: return "Media", "medium","🟡","ev-medium","conf-medium"
     else:            return "Baja",  "low",   "🟠","ev-low","conf-low"
 
-def detect_value_bets(probs, bk, home_name, away_name, ev_threshold):
+def detect_value_bets(probs, bk, home_name, away_name, ev_threshold, corner_probs=None):
     if not probs: return []
     checks=[
         ("1 Local",       probs["home_win"],  bk["h2h_1"]),
@@ -1081,6 +1162,17 @@ def detect_value_bets(probs, bk, home_name, away_name, ev_threshold):
         ("BTTS Sí",       probs["btts"],       bk["btts_yes"]),
         ("BTTS No",       probs["no_btts"],    bk["btts_no"]),
     ]
+    if corner_probs:
+        checks += [
+            ("Córners +8.5",  corner_probs.get("o8_5", 0),  bk["c85"]),
+            ("Córners -8.5",  corner_probs.get("u8_5", 0),  bk["uc85"]),
+            ("Córners +9.5",  corner_probs.get("o9_5", 0),  bk["c95"]),
+            ("Córners -9.5",  corner_probs.get("u9_5", 0),  bk["uc95"]),
+            ("Córners +10.5", corner_probs.get("o10_5", 0), bk["c105"]),
+            ("Córners -10.5", corner_probs.get("u10_5", 0), bk["uc105"]),
+            ("Córners +11.5", corner_probs.get("o11_5", 0), bk["c115"]),
+            ("Córners -11.5", corner_probs.get("u11_5", 0), bk["uc115"]),
+        ]
     found=[]
     for label,model_p,bk_odd in checks:
         if bk_odd<MIN_ODDS or bk_odd>MAX_ODDS: continue
@@ -1697,6 +1789,31 @@ def prob_bar_html(p, home_name, away_name):
       </div>
     </div>"""
 
+def _corner_shot_detail_html(vb):
+    parts = []
+    cp = vb.get("corner_probs")
+    sp = vb.get("shot_probs")
+    sotp = vb.get("sot_probs")
+    if cp:
+        parts.append(
+            f'<div class="vb-detail-item"><span class="vb-detail-label">🚩 Córners pred.</span>'
+            f'<span class="vb-detail-val blue">{cp["lam_total"]} '
+            f'<span style="font-size:.68rem;color:#94a3b8">({cp["lam_h"]} / {cp["lam_a"]})</span></span></div>'
+        )
+    if sp:
+        parts.append(
+            f'<div class="vb-detail-item"><span class="vb-detail-label">👟 Tiros pred.</span>'
+            f'<span class="vb-detail-val blue">{sp["lam_total"]} '
+            f'<span style="font-size:.68rem;color:#94a3b8">({sp["lam_h"]} / {sp["lam_a"]})</span></span></div>'
+        )
+    if sotp:
+        parts.append(
+            f'<div class="vb-detail-item"><span class="vb-detail-label">🎯 Al arco pred.</span>'
+            f'<span class="vb-detail-val blue">{sotp["lam_total"]} '
+            f'<span style="font-size:.68rem;color:#94a3b8">({sotp["lam_h"]} / {sotp["lam_a"]})</span></span></div>'
+        )
+    return "".join(parts)
+
 def vb_card_html(vb, idx=0):
     date_str = fmt_match_dt(vb["date"])
     hctx, actx = vb["home_ctx"], vb["away_ctx"]
@@ -1763,6 +1880,7 @@ def vb_card_html(vb, idx=0):
         f'<div class="vb-detail-item"><span class="vb-detail-label">xG Visit.</span><span class="vb-detail-val blue">{xg_a}</span></div>'
         f'<div class="vb-detail-item"><span class="vb-detail-label">Kelly 25%</span>'
         f'<span class="vb-detail-val green">🎯 {vb.get("kelly", 0):.1f}% · {round(vb.get("kelly", 0) / 100 * st.session_state.get("bankroll", 100), 1)}u</span></div>'
+        + _corner_shot_detail_html(vb) +
         f'</div>'
     )
 
@@ -1939,11 +2057,12 @@ def main():
     is_tournament = lc.get("is_tournament", False)
     with st.spinner("Cargando datos..."):
         if is_tournament:
-            season_df = fetch_intl_matches(FD_KEY)
+            season_df  = fetch_intl_matches(FD_KEY)
+            hist_mapped = pd.DataFrame()
         else:
             season_df    = fetch_season_matches(FD_KEY, lc["fd"])
             hist_df      = fetch_historical_seasons(lc["fd"], n_seasons=2)
-            season_df    = enrich_with_history(season_df, hist_df)
+            season_df, hist_mapped = enrich_with_history(season_df, hist_df)
         standings_df = fetch_standings(FD_KEY, lc["fd"])
         upcoming     = fetch_upcoming_matches(FD_KEY, lc["fd"], days_ahead)
         odds_list    = fetch_odds(ODDS_KEY, lc["odds"])
@@ -2027,6 +2146,14 @@ def main():
             intl_mode=is_tournament,
         )
 
+    # ── Ratings de corners y tiros (solo ligas, no torneos) ──
+    corner_ratings = shot_ratings = sot_ratings = {}
+    avg_ch = avg_ca = avg_sh = avg_sa = avg_soth = avg_sota = 5.0
+    if not is_tournament and not hist_mapped.empty:
+        corner_ratings, avg_ch, avg_ca = build_stat_ratings(hist_mapped, "home_corners", "away_corners")
+        shot_ratings,   avg_sh, avg_sa = build_stat_ratings(hist_mapped, "home_shots",   "away_shots")
+        sot_ratings, avg_soth, avg_sota = build_stat_ratings(hist_mapped, "home_shots_ot","away_shots_ot")
+
     # ── Metrics bar ──────────────────────────────────────────
     mc = st.columns(5)
     for col, num, label in zip(mc, [
@@ -2059,7 +2186,15 @@ def main():
         # Form for card display
         hform = team_form(season_df, m["home_id"], 3)
         aform = team_form(season_df, m["away_id"], 3)
-        vbets = detect_value_bets(p, bk, m["home_name"], m["away_name"], ev_threshold)
+        # Corner / shot predictions
+        CORNER_LINES = [8.5, 9.5, 10.5, 11.5]
+        SHOT_LINES   = [20.5, 22.5, 24.5]
+        SOT_LINES    = [7.5, 8.5, 9.5]
+        cp   = stat_ou_probs(m["home_id"], m["away_id"], corner_ratings, avg_ch, avg_ca, CORNER_LINES) if corner_ratings else None
+        sp   = stat_ou_probs(m["home_id"], m["away_id"], shot_ratings,   avg_sh, avg_sa, SHOT_LINES)   if shot_ratings   else None
+        sotp = stat_ou_probs(m["home_id"], m["away_id"], sot_ratings, avg_soth, avg_sota, SOT_LINES)   if sot_ratings    else None
+
+        vbets = detect_value_bets(p, bk, m["home_name"], m["away_name"], ev_threshold, corner_probs=cp)
         for vb in vbets:
             vb.update({
                 "date":     m["date"],
@@ -2067,16 +2202,19 @@ def main():
                 "home_ctx": hctx,
                 "away_ctx": actx,
                 "ctx_alerts": alerts,
-                # Extra data for analysis + card precision
-                "home_id":   m["home_id"],
-                "away_id":   m["away_id"],
-                "probs":     p,
-                "home_form": hform,
-                "away_form": aform,
+                "home_id":    m["home_id"],
+                "away_id":    m["away_id"],
+                "probs":      p,
+                "home_form":  hform,
+                "away_form":  aform,
+                "corner_probs": cp,
+                "shot_probs":   sp,
+                "sot_probs":    sotp,
             })
             all_vb.append(vb)
         match_map[m["id"]] = {"p":p,"bk":bk,"vbets":vbets,"hctx":hctx,"actx":actx,
-                               "alerts":alerts,"md":md,"hform":hform,"aform":aform}
+                               "alerts":alerts,"md":md,"hform":hform,"aform":aform,
+                               "cp":cp,"sp":sp,"sotp":sotp}
 
     all_vb.sort(key=lambda x: x["ev"], reverse=True)
 
