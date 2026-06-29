@@ -537,8 +537,31 @@ def enrich_with_history(season_df, hist_df):
     Añade partidos históricos al DataFrame de la temporada actual.
     Hace fuzzy match de nombres de equipos del CSV histórico contra los IDs del API.
     """
-    if hist_df.empty or season_df.empty:
+    if hist_df.empty:
         return season_df, pd.DataFrame()
+
+    # Off-season: sin datos de la temporada actual pero sí tenemos histórico.
+    # Usamos los nombres crudos del CSV como pseudo-IDs para que build_ratings funcione.
+    if season_df.empty:
+        stat_rows = []
+        extra_cols = ["home_corners","away_corners","home_shots","away_shots","home_shots_ot","away_shots_ot"]
+        for _, row in hist_df.iterrows():
+            h_raw = row["home_name_raw"].strip()
+            a_raw = row["away_name_raw"].strip()
+            stat_row = {
+                "date": row["date"],
+                "home_id": h_raw, "home_name": h_raw,
+                "away_id": a_raw, "away_name": a_raw,
+                "home_goals": int(row["home_goals"]),
+                "away_goals": int(row["away_goals"]),
+            }
+            for col in extra_cols:
+                stat_row[col] = row.get(col, np.nan)
+            stat_rows.append(stat_row)
+        if not stat_rows:
+            return season_df, pd.DataFrame()
+        hist_mapped = pd.DataFrame(stat_rows)
+        return season_df, hist_mapped
 
     name_map = {}
     for _, row in season_df.iterrows():
