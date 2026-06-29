@@ -538,7 +538,7 @@ def enrich_with_history(season_df, hist_df):
     Hace fuzzy match de nombres de equipos del CSV histórico contra los IDs del API.
     """
     if hist_df.empty or season_df.empty:
-        return season_df
+        return season_df, pd.DataFrame()
 
     name_map = {}
     for _, row in season_df.iterrows():
