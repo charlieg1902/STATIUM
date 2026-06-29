@@ -2571,53 +2571,58 @@ def main():
     # ─── TAB 3: EQUIPO ────────────────────────────────────────
     with t3:
         st.markdown("### 🔍 Análisis de equipo")
-        all_t={row["home_id"]:row["home_name"] for _,row in season_df.iterrows()}
-        all_t.update({row["away_id"]:row["away_name"] for _,row in season_df.iterrows()})
+        # Fuente de equipos: temporada actual si disponible, sino histórico
+        _team_src = season_df if not season_df.empty else hist_mapped
+        all_t={row["home_id"]:row["home_name"] for _,row in _team_src.iterrows()}
+        all_t.update({row["away_id"]:row["away_name"] for _,row in _team_src.iterrows()})
         n2id={v:k for k,v in all_t.items()}
-        sel=st.selectbox("Equipo",sorted(all_t.values()))
-        sid=n2id[sel]
-        if not standings_df.empty:
-            lmd=int(standings_df["played"].max())
-            td=is_title_decided(standings_df,max(0,lc["games"]-lmd))
-            sctx=get_team_context(sid,standings_df,lc,lmd,td)
-            st.markdown(f'<div style="margin:8px 0">{ctx_badge_html(sctx)}</div>',unsafe_allow_html=True)
-        if sid in ratings:
-            r=ratings[sid]
-            m1,m2,m3,m4,m5=st.columns(5)
-            m1.metric("Partidos",r["n"]); m2.metric("N efectivo",r["n_eff"])
-            m3.metric("Goles/pj",r["gs_avg"]); m4.metric("Recibidos/pj",r["gc_avg"])
-            m5.metric("Diferencia",f"{round(r['gs_avg']-r['gc_avg'],2):+.2f}")
-            st.markdown("**Forma reciente**")
-            f=team_form(season_df,sid,8)
-            if f: st.markdown(render_form(f),unsafe_allow_html=True)
-            st.divider()
-            st.markdown("**Ratings calibrados (1.00 = media de liga)**")
-            r1,r2,r3,r4=st.columns(4)
-            r1.metric("Ataque local",   round(r["att_h"],3),"↑" if r["att_h"]>1 else "↓")
-            r2.metric("Ataque visitante",round(r["att_a"],3),"↑" if r["att_a"]>1 else "↓")
-            r3.metric("Defensa local",  round(r["def_h"],3),"↓ sólida" if r["def_h"]<1 else "↑ porosa")
-            r4.metric("Def. visitante", round(r["def_a"],3),"↓ sólida" if r["def_a"]<1 else "↑ porosa")
-            hm_t=season_df[season_df["home_id"]==sid][["date","home_goals","away_goals"]].rename(columns={"home_goals":"gf","away_goals":"gc"})
-            am_t=season_df[season_df["away_id"]==sid][["date","home_goals","away_goals"]].rename(columns={"away_goals":"gf","home_goals":"gc"})
-            all_m=pd.concat([hm_t,am_t]).sort_values("date").reset_index(drop=True)
-            if not all_m.empty:
-                import plotly.graph_objects as go
-                fig=go.Figure()
-                fig.add_trace(go.Scatter(x=all_m.index,y=all_m["gf"],name="Anotados",
-                    line=dict(color=BRAND_GREEN,width=2.5),mode="lines+markers",
-                    marker=dict(size=5)))
-                fig.add_trace(go.Scatter(x=all_m.index,y=all_m["gc"],name="Recibidos",
-                    line=dict(color="#ef4444",width=2.5),mode="lines+markers",
-                    marker=dict(size=5)))
-                fig.add_hline(y=r["gs_avg"],line_dash="dot",line_color=BRAND_GREEN,opacity=0.6)
-                fig.add_hline(y=r["gc_avg"],line_dash="dot",line_color="#ef4444",opacity=0.6)
-                fig.update_layout(height=260,margin=dict(l=0,r=0,t=10,b=0),
-                    legend=dict(orientation="h"),
-                    paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(248,250,252,1)",
-                    xaxis=dict(showgrid=False),yaxis=dict(gridcolor="#f1f5f9"))
-                st.plotly_chart(fig,use_container_width=True)
+        if not all_t:
+            st.info("No hay datos de equipos disponibles para esta liga.")
         else:
-            st.warning("Datos insuficientes para este equipo.")
+            sel=st.selectbox("Equipo",sorted(all_t.values()))
+            sid=n2id[sel]
+            if not standings_df.empty:
+                lmd=int(standings_df["played"].max())
+                td=is_title_decided(standings_df,max(0,lc["games"]-lmd))
+                sctx=get_team_context(sid,standings_df,lc,lmd,td)
+                st.markdown(f'<div style="margin:8px 0">{ctx_badge_html(sctx)}</div>',unsafe_allow_html=True)
+            if sid in ratings:
+                r=ratings[sid]
+                m1,m2,m3,m4,m5=st.columns(5)
+                m1.metric("Partidos",r["n"]); m2.metric("N efectivo",r["n_eff"])
+                m3.metric("Goles/pj",r["gs_avg"]); m4.metric("Recibidos/pj",r["gc_avg"])
+                m5.metric("Diferencia",f"{round(r['gs_avg']-r['gc_avg'],2):+.2f}")
+                st.markdown("**Forma reciente**")
+                f=team_form(_team_src,sid,8)
+                if f: st.markdown(render_form(f),unsafe_allow_html=True)
+                st.divider()
+                st.markdown("**Ratings calibrados (1.00 = media de liga)**")
+                r1,r2,r3,r4=st.columns(4)
+                r1.metric("Ataque local",   round(r["att_h"],3),"↑" if r["att_h"]>1 else "↓")
+                r2.metric("Ataque visitante",round(r["att_a"],3),"↑" if r["att_a"]>1 else "↓")
+                r3.metric("Defensa local",  round(r["def_h"],3),"↓ sólida" if r["def_h"]<1 else "↑ porosa")
+                r4.metric("Def. visitante", round(r["def_a"],3),"↓ sólida" if r["def_a"]<1 else "↑ porosa")
+                hm_t=_team_src[_team_src["home_id"]==sid][["date","home_goals","away_goals"]].rename(columns={"home_goals":"gf","away_goals":"gc"})
+                am_t=_team_src[_team_src["away_id"]==sid][["date","home_goals","away_goals"]].rename(columns={"away_goals":"gf","home_goals":"gc"})
+                all_m=pd.concat([hm_t,am_t]).sort_values("date").reset_index(drop=True)
+                if not all_m.empty:
+                    import plotly.graph_objects as go
+                    fig=go.Figure()
+                    fig.add_trace(go.Scatter(x=all_m.index,y=all_m["gf"],name="Anotados",
+                        line=dict(color=BRAND_GREEN,width=2.5),mode="lines+markers",
+                        marker=dict(size=5)))
+                    fig.add_trace(go.Scatter(x=all_m.index,y=all_m["gc"],name="Recibidos",
+                        line=dict(color="#ef4444",width=2.5),mode="lines+markers",
+                        marker=dict(size=5)))
+                    fig.add_hline(y=r["gs_avg"],line_dash="dot",line_color=BRAND_GREEN,opacity=0.6)
+                    fig.add_hline(y=r["gc_avg"],line_dash="dot",line_color="#ef4444",opacity=0.6)
+                    fig.update_layout(height=260,margin=dict(l=0,r=0,t=10,b=0),
+                        legend=dict(orientation="h"),
+                        paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(248,250,252,1)",
+                        xaxis=dict(showgrid=False),yaxis=dict(gridcolor="#f1f5f9"))
+                    st.plotly_chart(fig,use_container_width=True)
+            else:
+                st.warning("Datos insuficientes para este equipo.")
 
     # ─── TAB 4: CLASIFICACIÓN ─────────────────────────────────
     with t4:
