@@ -2533,12 +2533,15 @@ def main():
             hctx,actx,alerts = info["hctx"],info["actx"],info["alerts"]
             suffix = f"  🎯 {len(info['vbets'])}" if info["vbets"] else ""
             suffix += "  ⚠️" if alerts else ""
+            h_emoji = "" if is_tournament or hctx["label"]=="Sin datos" else hctx["emoji"]+" "
+            a_emoji = "" if is_tournament or actx["label"]=="Sin datos" else " "+actx["emoji"]
             with st.expander(
-                f"{hctx['emoji']} **{m['home_name']}** vs **{m['away_name']}** {actx['emoji']} "
+                f"{h_emoji}**{m['home_name']}** vs **{m['away_name']}**{a_emoji} "
                 f"· {fmt_match_dt(m['date'])}{suffix}", expanded=False):
-                col1,col2=st.columns(2)
-                col1.markdown(f"{ctx_badge_html(hctx)}", unsafe_allow_html=True)
-                col2.markdown(f"{ctx_badge_html(actx)}", unsafe_allow_html=True)
+                if not is_tournament and hctx["label"] != "Sin datos":
+                    col1,col2=st.columns(2)
+                    col1.markdown(f"{ctx_badge_html(hctx)}", unsafe_allow_html=True)
+                    col2.markdown(f"{ctx_badge_html(actx)}", unsafe_allow_html=True)
                 for a in alerts: st.warning(a)
                 if not p:
                     st.info("Datos insuficientes.")
