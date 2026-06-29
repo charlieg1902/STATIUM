@@ -409,6 +409,32 @@ INTL_SOURCES = [
 # sus amistosos / Copa Oro / CONCACAF NL tienen peso elevado (= clasificatorias)
 HOST_NATIONS = {"united states", "usa", "u.s.a.", "canada", "mexico", "méxico"}
 
+# 48 selecciones clasificadas al Mundial 2026
+WC2026_QUALIFIED = {
+    # CONMEBOL (6)
+    "Argentina","Brazil","Colombia","Ecuador","Uruguay","Venezuela",
+    # UEFA (16)
+    "Germany","Spain","France","England","Portugal","Netherlands",
+    "Belgium","Croatia","Austria","Denmark","Serbia","Czech Republic",
+    "Turkey","Georgia","Albania","Slovenia",
+    # CONCACAF (6) — sede + clasificados
+    "United States","Mexico","Canada","Panama","Costa Rica","Honduras",
+    # CAF (9)
+    "Morocco","Senegal","Egypt","Nigeria","Cameroon","South Africa",
+    "Algeria","Tunisia","Ivory Coast",
+    # AFC (8)
+    "Japan","South Korea","Saudi Arabia","Iran","Australia",
+    "Jordan","Iraq","Uzbekistan",
+    # OFC (1)
+    "New Zealand",
+    # CONMEBOL repechaje (1)
+    "Bolivia",
+    # UEFA playoffs (pendientes al momento de codificación — se incluyen los probables)
+    "Ukraine","Greece","Poland","Iceland",
+    # Interconfederal repechaje (pendientes)
+    "Indonesia","Bahrain","New Caledonia","Venezuela",
+}
+
 # ═══════════════════════════════════════════════════════════
 # API
 # ═══════════════════════════════════════════════════════════
@@ -2582,6 +2608,9 @@ def main():
         _team_src = season_df if not season_df.empty else hist_mapped
         all_t={row["home_id"]:row["home_name"] for _,row in _team_src.iterrows()}
         all_t.update({row["away_id"]:row["away_name"] for _,row in _team_src.iterrows()})
+        # Para el Mundial: filtrar solo los 48 clasificados
+        if is_tournament and lc.get("fd") == "WC":
+            all_t = {k:v for k,v in all_t.items() if v in WC2026_QUALIFIED}
         n2id={v:k for k,v in all_t.items()}
         if not all_t:
             st.info("No hay datos de equipos disponibles para esta liga.")
