@@ -415,7 +415,7 @@ WC2026_QUALIFIED = {
     "Argentina","Brazil","Colombia","Ecuador","Uruguay","Venezuela",
     # UEFA (16)
     "Germany","Spain","France","England","Portugal","Netherlands",
-    "Belgium","Croatia","Austria","Denmark","Serbia","Czech Republic",
+    "Belgium","Croatia","Austria","Serbia","Czech Republic",
     "Turkey","Georgia","Slovenia",
     # CONCACAF (6) — sede + clasificados
     "United States","Mexico","Canada","Panama","Costa Rica","Honduras",
