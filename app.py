@@ -2403,11 +2403,17 @@ def main():
     with t1:
         st.markdown(f"### 🎯 Value Bets · {league_name}")
         ALL_CONF    = ["Alta","Media","Baja"]
-        ALL_MARKETS = ["1 Local","X Empate","2 Visitante",
-                       "Over 1.5","Under 1.5","Over 2.5","Under 2.5","Over 3.5","Under 3.5",
-                       "BTTS Sí","BTTS No",
-                       "Córners +8.5","Córners -8.5","Córners +9.5","Córners -9.5",
-                       "Córners +10.5","Córners -10.5","Córners +11.5","Córners -11.5"]
+        ALL_MARKETS = ["1X2","Over/Under Goles","BTTS","Córners","Tiros","Tiros al Arco"]
+
+        def market_category(label):
+            if label in ("1 Local","X Empate","2 Visitante"):           return "1X2"
+            if any(label.startswith(x) for x in ("Over 1","Under 1","Over 2","Under 2","Over 3","Under 3")): return "Over/Under Goles"
+            if label.startswith("BTTS"):                                 return "BTTS"
+            if label.startswith("Córners"):                              return "Córners"
+            if label.startswith("Tiros al"):                             return "Tiros al Arco"
+            if label.startswith("Tiros"):                                return "Tiros"
+            return "1X2"
+
         col_l, col_r = st.columns([1,1])
         conf_filter   = col_l.multiselect("Confianza", ALL_CONF, default=ALL_CONF,
                                            help="Si lo dejas vacío se muestran todos los niveles de confianza.")
@@ -2415,10 +2421,9 @@ def main():
                                            help="Si lo dejas vacío se muestran todos los mercados.")
         st.markdown("---")
 
-        # Filtro vacío = sin restricción (mostrar todo), no "ocultar todo"
         conf_eff   = conf_filter if conf_filter else ALL_CONF
         market_eff = market_filter if market_filter else ALL_MARKETS
-        filtered = [v for v in all_vb_view if v["conf_label"] in conf_eff and v["label"] in market_eff]
+        filtered = [v for v in all_vb_view if v["conf_label"] in conf_eff and market_category(v["label"]) in market_eff]
 
         if not filtered:
             st.info("No se detectaron value bets con estos criterios. Prueba bajando el EV mínimo.")
