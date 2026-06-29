@@ -2132,6 +2132,10 @@ def main():
                 "Mientras tanto puedes ver próximos partidos, cuotas y el Tracker."
             )
             ratings, avg_h, avg_a = {}, 1.35, 1.10
+        elif not hist_mapped.empty:
+            # Liga en receso: sin temporada actual pero sí tenemos histórico
+            st.info("📅 Liga en receso — usando datos de temporadas anteriores para los ratings.")
+            ratings, avg_h, avg_a = build_ratings(hist_mapped, decay_rate=DECAY_RATE)
         else:
             st.error(
                 "❌ No se pudieron cargar partidos históricos. "
