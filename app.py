@@ -520,10 +520,12 @@ def fetch_historical_seasons(fd_code, n_seasons=2):
             df = df.dropna(subset=["date"])
             for col, key in [("home_corners","HC"),("away_corners","AC"),
                               ("home_shots","HS"),("away_shots","AS"),
-                              ("home_shots_ot","HST"),("away_shots_ot","AST")]:
+                              ("home_shots_ot","HST"),("away_shots_ot","AST"),
+                              ("home_fouls","HF"),("away_fouls","AF")]:
                 df[col] = pd.to_numeric(df[key], errors="coerce") if key in df.columns else np.nan
             keep = ["date","home_name_raw","away_name_raw","home_goals","away_goals",
-                    "home_corners","away_corners","home_shots","away_shots","home_shots_ot","away_shots_ot"]
+                    "home_corners","away_corners","home_shots","away_shots",
+                    "home_shots_ot","away_shots_ot","home_fouls","away_fouls"]
             all_parts.append(df[keep])
         except Exception:
             continue
@@ -544,7 +546,7 @@ def enrich_with_history(season_df, hist_df):
     # Usamos los nombres crudos del CSV como pseudo-IDs para que build_ratings funcione.
     if season_df.empty:
         stat_rows = []
-        extra_cols = ["home_corners","away_corners","home_shots","away_shots","home_shots_ot","away_shots_ot"]
+        extra_cols = ["home_corners","away_corners","home_shots","away_shots","home_shots_ot","away_shots_ot","home_fouls","away_fouls"]
         for _, row in hist_df.iterrows():
             h_raw = row["home_name_raw"].strip()
             a_raw = row["away_name_raw"].strip()
@@ -2173,13 +2175,15 @@ def main():
             intl_mode=is_tournament,
         )
 
-    # ── Ratings de corners y tiros (solo ligas, no torneos) ──
-    corner_ratings = shot_ratings = sot_ratings = {}
+    # ── Ratings de corners, tiros y faltas (solo ligas, no torneos) ──
+    corner_ratings = shot_ratings = sot_ratings = foul_ratings = {}
     avg_ch = avg_ca = avg_sh = avg_sa = avg_soth = avg_sota = 5.0
+    avg_fh = avg_fa = 11.0
     if not is_tournament and not hist_mapped.empty:
         corner_ratings, avg_ch, avg_ca = build_stat_ratings(hist_mapped, "home_corners", "away_corners")
         shot_ratings,   avg_sh, avg_sa = build_stat_ratings(hist_mapped, "home_shots",   "away_shots")
         sot_ratings, avg_soth, avg_sota = build_stat_ratings(hist_mapped, "home_shots_ot","away_shots_ot")
+        foul_ratings,   avg_fh, avg_fa  = build_stat_ratings(hist_mapped, "home_fouls",   "away_fouls")
 
     # ── Metrics bar ──────────────────────────────────────────
     mc = st.columns(5)
@@ -2592,11 +2596,19 @@ def main():
                 m1.metric("Partidos",r["n"]); m2.metric("N efectivo",r["n_eff"])
                 m3.metric("Goles/pj",r["gs_avg"]); m4.metric("Recibidos/pj",r["gc_avg"])
                 m5.metric("Diferencia",f"{round(r['gs_avg']-r['gc_avg'],2):+.2f}")
+                # Contexto de competición (solo torneos internacionales)
+                if is_tournament and "comp_label" in _team_src.columns:
+                    comps = _team_src[
+                        (_team_src["home_id"]==sid) | (_team_src["away_id"]==sid)
+                    ]["comp_label"].value_counts()
+                    if not comps.empty:
+                        comp_txt = " · ".join(f"**{k}** ({v}pj)" for k,v in comps.items())
+                        st.caption(f"Competiciones incluidas: {comp_txt}")
                 st.markdown("**Forma reciente**")
                 f=team_form(_team_src,sid,8)
                 if f: st.markdown(render_form(f),unsafe_allow_html=True)
                 st.divider()
-                st.markdown("**Ratings calibrados (1.00 = media de liga)**")
+                st.markdown("**Ratings calibrados (1.00 = media)**" if is_tournament else "**Ratings calibrados (1.00 = media de liga)**")
                 r1,r2,r3,r4=st.columns(4)
                 r1.metric("Ataque local",   round(r["att_h"],3),"↑" if r["att_h"]>1 else "↓")
                 r2.metric("Ataque visitante",round(r["att_a"],3),"↑" if r["att_a"]>1 else "↓")
@@ -2621,6 +2633,42 @@ def main():
                         paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(248,250,252,1)",
                         xaxis=dict(showgrid=False),yaxis=dict(gridcolor="#f1f5f9"))
                     st.plotly_chart(fig,use_container_width=True)
+
+                # ── Estadísticas avanzadas por partido ──────────────
+                if not is_tournament and not hist_mapped.empty:
+                    st.divider()
+                    st.markdown("**Estadísticas por partido (histórico)**")
+                    hm_stats = hist_mapped[hist_mapped["home_id"]==sid]
+                    am_stats = hist_mapped[hist_mapped["away_id"]==sid]
+
+                    def _avg_stat(col_h, col_a):
+                        vals_h = hm_stats[col_h].dropna() if col_h in hm_stats.columns else pd.Series(dtype=float)
+                        vals_a = am_stats[col_a].dropna() if col_a in am_stats.columns else pd.Series(dtype=float)
+                        vals   = pd.concat([vals_h, vals_a])
+                        return round(vals.mean(), 1) if not vals.empty else None
+
+                    def _avg_stat_against(col_h, col_a):
+                        vals_h = hm_stats[col_a].dropna() if col_a in hm_stats.columns else pd.Series(dtype=float)
+                        vals_a = am_stats[col_h].dropna() if col_h in am_stats.columns else pd.Series(dtype=float)
+                        vals   = pd.concat([vals_h, vals_a])
+                        return round(vals.mean(), 1) if not vals.empty else None
+
+                    stat_items = [
+                        ("Córners",        "home_corners","away_corners"),
+                        ("Tiros totales",  "home_shots",  "away_shots"),
+                        ("Tiros al arco",  "home_shots_ot","away_shots_ot"),
+                        ("Faltas",         "home_fouls",  "away_fouls"),
+                    ]
+                    sa_cols = st.columns(4)
+                    for col_ui, (label, ch, ca) in zip(sa_cols, stat_items):
+                        avg_f = _avg_stat(ch, ca)
+                        avg_c = _avg_stat_against(ch, ca)
+                        if avg_f is not None:
+                            col_ui.metric(f"**{label}** a favor",  avg_f)
+                            col_ui.metric(f"{label} en contra", avg_c if avg_c is not None else "—")
+                        else:
+                            col_ui.caption(f"{label}: sin datos")
+
             else:
                 st.warning("Datos insuficientes para este equipo.")
 
