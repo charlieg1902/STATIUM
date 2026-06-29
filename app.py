@@ -2403,7 +2403,11 @@ def main():
     with t1:
         st.markdown(f"### 🎯 Value Bets · {league_name}")
         ALL_CONF    = ["Alta","Media","Baja"]
-        ALL_MARKETS = ["1 Local","X Empate","2 Visitante","Over 2.5","Under 2.5"]
+        ALL_MARKETS = ["1 Local","X Empate","2 Visitante",
+                       "Over 1.5","Under 1.5","Over 2.5","Under 2.5","Over 3.5","Under 3.5",
+                       "BTTS Sí","BTTS No",
+                       "Córners +8.5","Córners -8.5","Córners +9.5","Córners -9.5",
+                       "Córners +10.5","Córners -10.5","Córners +11.5","Córners -11.5"]
         col_l, col_r = st.columns([1,1])
         conf_filter   = col_l.multiselect("Confianza", ALL_CONF, default=ALL_CONF,
                                            help="Si lo dejas vacío se muestran todos los niveles de confianza.")
@@ -2670,8 +2674,16 @@ def main():
                 fc3, fc4  = st.columns(2)
                 league_val = fc3.text_input("Liga", value=league_name)
                 market_val = fc4.selectbox("Mercado",
-                    ["1 Local","X Empate","2 Visitante","Over 2.5","Under 2.5"],
-                    index=["1 Local","X Empate","2 Visitante","Over 2.5","Under 2.5"].index(sel_vb["label"]) if sel_vb else 0)
+                    ["1 Local","X Empate","2 Visitante",
+                     "Over 1.5","Under 1.5","Over 2.5","Under 2.5","Over 3.5","Under 3.5",
+                     "BTTS Sí","BTTS No",
+                     "Córners +8.5","Córners -8.5","Córners +9.5","Córners -9.5",
+                     "Córners +10.5","Córners -10.5","Córners +11.5","Córners -11.5"],
+                    index=["1 Local","X Empate","2 Visitante",
+                           "Over 1.5","Under 1.5","Over 2.5","Under 2.5","Over 3.5","Under 3.5",
+                           "BTTS Sí","BTTS No",
+                           "Córners +8.5","Córners -8.5","Córners +9.5","Córners -9.5",
+                           "Córners +10.5","Córners -10.5","Córners +11.5","Córners -11.5"].index(sel_vb["label"]) if sel_vb and sel_vb.get("label") in ["1 Local","X Empate","2 Visitante","Over 1.5","Under 1.5","Over 2.5","Under 2.5","Over 3.5","Under 3.5","BTTS Sí","BTTS No","Córners +8.5","Córners -8.5","Córners +9.5","Córners -9.5","Córners +10.5","Córners -10.5","Córners +11.5","Córners -11.5"] else 0)
                 fc5, fc6, fc7 = st.columns(3)
                 odds_val   = fc5.number_input("Cuota entrada", min_value=1.01, max_value=20.0,
                                               value=float(sel_vb["bk_odds"]) if sel_vb else 2.0, step=0.05)
