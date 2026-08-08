@@ -366,12 +366,55 @@ def fmt_match_dt(date_str, fmt="%a %d/%m · %H:%M"):
 
 LEAGUES = {
     "🌍 Mundial 2026":     {"fd":"WC",  "odds":"soccer_fifa_world_cup",     "games":3, "teams":4, "cl":2,"euro":0,"rel":1,"is_tournament":True,"featured":True},
-    "🇬🇧 Premier League": {"fd":"PL",  "odds":"soccer_epl",               "games":38,"teams":20,"cl":4,"euro":6,"rel":3,"off_season":True},
-    "🇪🇸 La Liga":         {"fd":"PD",  "odds":"soccer_spain_la_liga",      "games":38,"teams":20,"cl":4,"euro":7,"rel":3,"off_season":True},
-    "🇮🇹 Serie A":         {"fd":"SA",  "odds":"soccer_italy_serie_a",      "games":38,"teams":20,"cl":4,"euro":7,"rel":3,"off_season":True},
-    "🇩🇪 Bundesliga":      {"fd":"BL1", "odds":"soccer_germany_bundesliga", "games":34,"teams":18,"cl":4,"euro":6,"rel":2,"off_season":True},
-    "🇫🇷 Ligue 1":         {"fd":"FL1", "odds":"soccer_france_ligue_one",   "games":34,"teams":18,"cl":3,"euro":5,"rel":3,"off_season":True},
+    "🇬🇧 Premier League": {"fd":"PL",  "odds":"soccer_epl",               "games":38,"teams":20,"cl":4,"euro":6,"rel":3},
+    "🇪🇸 La Liga":         {"fd":"PD",  "odds":"soccer_spain_la_liga",      "games":38,"teams":20,"cl":4,"euro":7,"rel":3},
+    "🇮🇹 Serie A":         {"fd":"SA",  "odds":"soccer_italy_serie_a",      "games":38,"teams":20,"cl":4,"euro":7,"rel":3},
+    "🇩🇪 Bundesliga":      {"fd":"BL1", "odds":"soccer_germany_bundesliga", "games":34,"teams":18,"cl":4,"euro":6,"rel":2},
+    "🇫🇷 Ligue 1":         {"fd":"FL1", "odds":"soccer_france_ligue_one",   "games":34,"teams":18,"cl":3,"euro":5,"rel":3},
 }
+
+def _season_start_year():
+    """Año de inicio de la temporada activa o próxima. Ej: agosto 2026 → 2026 (temporada 26/27)."""
+    now = datetime.utcnow()
+    return now.year if now.month >= 8 else now.year - 1
+
+def _season_label():
+    y = _season_start_year()
+    return f"{y}/{str(y+1)[-2:]}"
+
+def _is_off_season():
+    """Receso de verano europeo: junio y julio."""
+    return datetime.utcnow().month in (6, 7)
+
+def _sidebar_banner_html():
+    now = datetime.utcnow()
+    if now.month == 6 or (now.month == 7 and now.day <= 19):
+        # Mundial activo (aprox. 15 jun – 19 jul 2026)
+        return (
+            '<span style="font-size:1.1rem">🌍</span>'
+            '<div><div style="font-size:.68rem;font-weight:700;color:#00A86B;letter-spacing:.4px;'
+            'font-family:\'IBM Plex Mono\',monospace">EN VIVO · FOCO MUNDIAL 2026</div>'
+            '<div style="font-size:.65rem;color:#64748b;margin-top:1px">Las grandes ligas están en receso de temporada</div>'
+            '</div>'
+        )
+    elif now.month == 7:
+        # Post-Mundial, pre-temporada
+        return (
+            '<span style="font-size:1.1rem">🏋️</span>'
+            '<div><div style="font-size:.68rem;font-weight:700;color:#f59e0b;letter-spacing:.4px;'
+            f'font-family:\'IBM Plex Mono\',monospace">PRETEMPORADA · {_season_label()}</div>'
+            '<div style="font-size:.65rem;color:#64748b;margin-top:1px">Las ligas arrancan en agosto</div>'
+            '</div>'
+        )
+    else:
+        # Temporada activa
+        return (
+            '<span style="font-size:1.1rem">⚽</span>'
+            '<div><div style="font-size:.68rem;font-weight:700;color:#00A86B;letter-spacing:.4px;'
+            f'font-family:\'IBM Plex Mono\',monospace">TEMPORADA {_season_label()} · EN CURSO</div>'
+            '<div style="font-size:.65rem;color:#64748b;margin-top:1px">Análisis en tiempo real</div>'
+            '</div>'
+        )
 
 MIN_ODDS     = 1.35
 MAX_ODDS     = 7.00
@@ -527,7 +570,7 @@ def fetch_historical_seasons(fd_code, n_seasons=2):
     sy_current = now.year if now.month >= 7 else now.year - 1
 
     all_parts = []
-    for i in range(1, n_seasons + 1):
+    for i in range(0, n_seasons + 1):   # i=0 intenta la temporada recién finalizada
         sy = sy_current - i
         ey = sy + 1
         season = f"{str(sy)[-2:]}{str(ey)[-2:]}"
@@ -2065,30 +2108,31 @@ def main():
             '<div style="background:linear-gradient(135deg,rgba(0,168,107,0.12),rgba(0,168,107,0.03));'
             'border:1px solid rgba(0,168,107,0.30);border-radius:10px;padding:9px 12px;margin-bottom:10px;'
             'display:flex;align-items:center;gap:8px">'
-            '<span style="font-size:1.1rem">🌍</span>'
-            '<div><div style="font-size:.68rem;font-weight:700;color:#00A86B;letter-spacing:.4px;'
-            'font-family:\'IBM Plex Mono\',monospace">EN VIVO · FOCO MUNDIAL 2026</div>'
-            '<div style="font-size:.65rem;color:#64748b;margin-top:1px">Las grandes ligas están en receso de temporada</div>'
-            '</div></div>',
+            + _sidebar_banner_html() +
+            '</div>',
             unsafe_allow_html=True
         )
+        _off_season = _is_off_season()
         league_opts = list(LEAGUES.keys())
         league_name = st.selectbox(
             "🏆 Liga / Torneo", league_opts, index=0,
             format_func=lambda n: f"{n}  ✨" if LEAGUES[n].get("featured")
-                         else f"{n}  · receso" if LEAGUES[n].get("off_season") else n,
+                         else f"{n}  · receso" if (_off_season and not LEAGUES[n].get("is_tournament")) else n,
         )
         if st.session_state.get("_last_league") != league_name:
             st.session_state["sel_date"] = "all"
             st.session_state["_last_league"] = league_name
         lc = LEAGUES[league_name]
-        if lc.get("off_season") and not lc.get("is_tournament"):
+        if _off_season and not lc.get("is_tournament"):
+            _now = datetime.utcnow()
+            _wc_active = _now.month == 6 or (_now.month == 7 and _now.day <= 19)
+            _wc_note = (" Te recomendamos enfocarte en <b>🌍 Mundial 2026</b> para esta semana."
+                        if _wc_active else f" La temporada <b>{_season_label()}</b> arranca en agosto.")
             st.markdown(
                 '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;'
                 'padding:8px 12px;margin-top:-2px;margin-bottom:10px;font-size:.74rem;color:#92400e;'
                 'font-family:\'Space Grotesk\',sans-serif">'
-                '😴 Esta liga está fuera de temporada — los datos corresponden a la última campaña '
-                'finalizada. Te recomendamos enfocarte en <b>🌍 Mundial 2026</b> para esta semana.'
+                f'😴 Esta liga está en receso — los datos corresponden a la última campaña finalizada.{_wc_note}'
                 '</div>',
                 unsafe_allow_html=True
             )
