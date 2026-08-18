@@ -1117,6 +1117,8 @@ def match_probs(home_id, away_id, ratings, avg_h, avg_a):
             "fair_btts":f(btts),"fair_no_btts":f(1-btts)}
 
 def team_form(df, team_id, n=6):
+    if df.empty or not {"home_id","date","home_goals","away_goals"}.issubset(df.columns):
+        return []
     hm=df[df["home_id"]==team_id][["date","home_goals","away_goals"]].rename(columns={"home_goals":"gf","away_goals":"gc"}); hm["v"]="H"
     am=df[df["away_id"]==team_id][["date","home_goals","away_goals"]].rename(columns={"away_goals":"gf","home_goals":"gc"}); am["v"]="A"
     out=[]
@@ -2245,6 +2247,9 @@ def main():
             intl_mode=is_tournament,
         )
 
+    # Fuente de forma: temporada actual si tiene datos, sino histórico
+    _form_src = season_df if (not season_df.empty and "home_goals" in season_df.columns) else hist_mapped
+
     # ── Ratings de corners, tiros y faltas (solo ligas, no torneos) ──
     corner_ratings = shot_ratings = sot_ratings = foul_ratings = {}
     avg_ch = avg_ca = avg_sh = avg_sa = avg_soth = avg_sota = 5.0
@@ -2285,8 +2290,8 @@ def main():
         actx  = get_team_context(m["away_id"], standings_df, lc, md, td)
         alerts= match_alerts(hctx, actx, md, lc, m["home_name"], m["away_name"])
         # Form for card display
-        hform = team_form(season_df, m["home_id"], 3)
-        aform = team_form(season_df, m["away_id"], 3)
+        hform = team_form(_form_src, m["home_id"], 3)
+        aform = team_form(_form_src, m["away_id"], 3)
         # Corner / shot predictions
         CORNER_LINES = [8.5, 9.5, 10.5, 11.5]
         SHOT_LINES   = [20.5, 22.5, 24.5]
@@ -2616,7 +2621,7 @@ def main():
                 if not p:
                     st.info("Datos insuficientes.")
                     continue
-                fh=team_form(season_df,m["home_id"]); fa=team_form(season_df,m["away_id"])
+                fh=team_form(_form_src,m["home_id"]); fa=team_form(_form_src,m["away_id"])
                 c1,c2,c3=st.columns([5,1,5])
                 c1.markdown(f"**🏠 {m['home_name']}**<br>{render_form(fh)}", unsafe_allow_html=True)
                 c2.markdown("**VS**")
