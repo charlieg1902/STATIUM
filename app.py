@@ -2243,6 +2243,24 @@ def main():
                 st.info("📅 Liga en receso — usando datos de temporadas anteriores para los ratings.")
             else:
                 st.info("📊 Temporada 26/27 en sus primeras jornadas — ratings calibrados con historial 25/26 y 24/25.")
+            # Remap CSV names → API team IDs usando standings (20 equipos de la liga)
+            if not standings_df.empty and "team_id" in standings_df.columns:
+                name_to_api_id = {}
+                for _, row in standings_df.iterrows():
+                    name_to_api_id[str(row["team_name"]).lower().strip()] = row["team_id"]
+                def _remap_id(raw_name):
+                    q = str(raw_name).lower().strip()
+                    if q in name_to_api_id:
+                        return name_to_api_id[q]
+                    best_s, best_id = 0, None
+                    for key, tid in name_to_api_id.items():
+                        s = _sim(q, key)
+                        if s > best_s:
+                            best_s, best_id = s, tid
+                    return best_id if best_s >= 0.55 else raw_name
+                hist_mapped = hist_mapped.copy()
+                hist_mapped["home_id"] = hist_mapped["home_id"].apply(_remap_id)
+                hist_mapped["away_id"] = hist_mapped["away_id"].apply(_remap_id)
             ratings, avg_h, avg_a = build_ratings(hist_mapped, decay_rate=DECAY_RATE)
         else:
             st.error(
@@ -2274,7 +2292,7 @@ def main():
     # ── Metrics bar ──────────────────────────────────────────
     _season_matches = len(season_df) if not season_df.empty else 0
     _hist_matches   = len(hist_mapped) if not hist_mapped.empty else 0
-    _data_label     = f"J26/27: {_season_matches}" if _season_matches > 0 else f"Historial: {_hist_matches}"
+    _data_label     = f"{_season_matches} jornadas" if _season_matches > 0 else f"{_hist_matches} históricos"
     mc = st.columns(5)
     for col, num, label in zip(mc, [
         _data_label, len(ratings), len(upcoming),
@@ -2308,8 +2326,12 @@ def main():
         avg_played = int(standings_df["played"].mean()) if not standings_df.empty else md
         remaining  = max(0, lc["games"] - avg_played)
         td    = is_title_decided(standings_df, remaining)
-        hctx  = get_team_context(m["home_id"], standings_df, lc, md, td)
-        actx  = get_team_context(m["away_id"], standings_df, lc, md, td)
+        # Suprimir contexto competitivo en jornadas iniciales (tabla sin datos reales)
+        if avg_played < 3:
+            hctx = actx = {"label":"Sin datos","emoji":"","css":"ctx-mid","alert":False,"dead":False}
+        else:
+            hctx  = get_team_context(m["home_id"], standings_df, lc, md, td)
+            actx  = get_team_context(m["away_id"], standings_df, lc, md, td)
         alerts= match_alerts(hctx, actx, md, lc, m["home_name"], m["away_name"])
         # Form for card display
         hform = team_form(_form_src, m["home_id"], 3)
