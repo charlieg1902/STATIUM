@@ -2230,8 +2230,11 @@ def main():
             )
             ratings, avg_h, avg_a = {}, 1.35, 1.10
         elif not hist_mapped.empty:
-            # Liga en receso: sin temporada actual pero sí tenemos histórico
-            st.info("📅 Liga en receso — usando datos de temporadas anteriores para los ratings.")
+            # Sin datos de la temporada actual aún (inicio de temporada o API pendiente)
+            if _is_off_season():
+                st.info("📅 Liga en receso — usando datos de temporadas anteriores para los ratings.")
+            else:
+                st.info("📊 Temporada 26/27 en sus primeras jornadas — ratings calibrados con historial 25/26 y 24/25.")
             ratings, avg_h, avg_a = build_ratings(hist_mapped, decay_rate=DECAY_RATE)
         else:
             st.error(
@@ -2274,6 +2277,14 @@ def main():
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
+
+    if not odds_list and not is_tournament:
+        st.warning(
+            "⚠️ **Sin cuotas disponibles en este momento.** "
+            "Posibles causas: la API de odds (The Odds API) no devuelve datos para esta liga ahora mismo — "
+            "puede ser que no haya partidos con cuotas abiertas aún, o que la suscripción necesite revisión. "
+            "El modelo sigue calculando probabilidades y puedes ver predicciones en el tab **Partidos**."
+        )
 
     # ── Pre-compute ──────────────────────────────────────────
     match_map = {}
