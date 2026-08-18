@@ -958,7 +958,8 @@ def build_ratings(df, decay_rate=None, intl_mode=False):
 
     min_games = 2 if intl_mode else 4
     min_rows  = 5 if intl_mode else 20
-    if df.empty or len(df) < min_rows:
+    required = {"home_id","away_id","home_goals","away_goals","date"}
+    if df.empty or len(df) < min_rows or not required.issubset(df.columns):
         return {}, 1.35, 1.10
 
     df = df.copy()
@@ -1018,6 +1019,9 @@ def build_ratings(df, decay_rate=None, intl_mode=False):
 
 def build_stat_ratings(df, home_col, away_col, decay_rate=0.008, min_games=4):
     """Ratings genéricos de ataque/defensa para corners, tiros o tiros al arco."""
+    required = {"home_id","away_id","date", home_col, away_col}
+    if df.empty or not required.issubset(df.columns):
+        return {}, 5.0, 4.5
     df = df.dropna(subset=[home_col, away_col, "home_id", "away_id"]).copy()
     if len(df) < 10:
         avg_h = float(df[home_col].mean()) if len(df) > 0 else 5.0
@@ -2665,9 +2669,12 @@ def main():
     with t3:
         st.markdown("### 🔍 Análisis de equipo")
         # Fuente de equipos: temporada actual si disponible, sino histórico
-        _team_src = season_df if not season_df.empty else hist_mapped
-        all_t={row["home_id"]:row["home_name"] for _,row in _team_src.iterrows()}
-        all_t.update({row["away_id"]:row["away_name"] for _,row in _team_src.iterrows()})
+        _has_ids = lambda d: not d.empty and "home_id" in d.columns
+        _team_src = season_df if _has_ids(season_df) else hist_mapped if _has_ids(hist_mapped) else pd.DataFrame()
+        all_t = {}
+        if _has_ids(_team_src):
+            all_t={row["home_id"]:row["home_name"] for _,row in _team_src.iterrows()}
+            all_t.update({row["away_id"]:row["away_name"] for _,row in _team_src.iterrows()})
         # Para el Mundial: filtrar solo los 48 clasificados
         if is_tournament and lc.get("fd") == "WC":
             all_t = {k:v for k,v in all_t.items() if v in WC2026_QUALIFIED}
