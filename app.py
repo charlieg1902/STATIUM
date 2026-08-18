@@ -1116,11 +1116,53 @@ def _dc_tau(x, y, lam_h, lam_a, rho):
     elif x == 1 and y == 1: return 1 - rho
     else:                   return 1.0
 
-def match_probs(home_id, away_id, ratings, avg_h, avg_a):
+def h2h_blend(home_id, away_id, lam_h, lam_a, hist_df, n=8, decay=0.012):
+    """Blend Poisson lambdas with weighted H2H goal rates. Returns (lam_h, lam_a, n_games)."""
+    if hist_df is None or hist_df.empty:
+        return lam_h, lam_a, 0
+    needed = {"home_id","away_id","home_goals","away_goals","date"}
+    if not needed.issubset(hist_df.columns):
+        return lam_h, lam_a, 0
+    mask = (
+        ((hist_df["home_id"]==home_id) & (hist_df["away_id"]==away_id)) |
+        ((hist_df["home_id"]==away_id) & (hist_df["away_id"]==home_id))
+    )
+    h2h = hist_df[mask].sort_values("date", ascending=False).head(n)
+    if len(h2h) < 2:
+        return lam_h, lam_a, len(h2h)
+    now = pd.Timestamp.utcnow()
+    wsum = wlh = wla = 0.0
+    for _, row in h2h.iterrows():
+        try:
+            days = (now - pd.Timestamp(row["date"])).days
+        except Exception:
+            days = 365
+        w = np.exp(-decay * max(0, days))
+        if row["home_id"] == home_id:
+            wlh += w * row["home_goals"]
+            wla += w * row["away_goals"]
+        else:
+            wlh += w * row["away_goals"]
+            wla += w * row["home_goals"]
+        wsum += w
+    if wsum < 1e-9:
+        return lam_h, lam_a, 0
+    h2h_lh = wlh / wsum
+    h2h_la = wla / wsum
+    # peso H2H: 5% por partido, máximo 30% con 6+ partidos
+    weight = min(0.30, len(h2h) * 0.05)
+    blended_h = (1 - weight) * lam_h + weight * h2h_lh
+    blended_a = (1 - weight) * lam_a + weight * h2h_la
+    return blended_h, blended_a, len(h2h)
+
+def match_probs(home_id, away_id, ratings, avg_h, avg_a, hist_df=None):
     if home_id not in ratings or away_id not in ratings: return None
     hr,ar = ratings[home_id], ratings[away_id]
     lam_h=float(np.clip(hr["att_h"]*ar["def_a"]*avg_h,0.40,4.5))
     lam_a=float(np.clip(ar["att_a"]*hr["def_h"]*avg_a,0.40,4.5))
+    lam_h, lam_a, n_h2h = h2h_blend(home_id, away_id, lam_h, lam_a, hist_df)
+    lam_h=float(np.clip(lam_h,0.40,4.5))
+    lam_a=float(np.clip(lam_a,0.40,4.5))
     G=8
     M=np.outer([poisson.pmf(i,lam_h) for i in range(G)],[poisson.pmf(i,lam_a) for i in range(G)])
     # Corrección Dixon-Coles: ajusta probabilidades de marcadores 0-0, 1-0, 0-1, 1-1
@@ -1144,7 +1186,8 @@ def match_probs(home_id, away_id, ratings, avg_h, avg_a):
             "fair_o15":f(o15),"fair_u15":f(1-o15),
             "fair_o25":f(o25),"fair_u25":f(1-o25),
             "fair_o35":f(o35),"fair_u35":f(1-o35),
-            "fair_btts":f(btts),"fair_no_btts":f(1-btts)}
+            "fair_btts":f(btts),"fair_no_btts":f(1-btts),
+            "n_h2h":n_h2h}
 
 def team_form(df, team_id, n=6):
     if df.empty or not {"home_id","date","home_goals","away_goals"}.issubset(df.columns):
@@ -1841,9 +1884,14 @@ def generate_analysis(vb, ratings):
     )
 
     # ── Calidad de datos ──────────────────────────────────
+    n_h2h = p.get("n_h2h", 0) if p else 0
+    h2h_note = (
+        f" · **{n_h2h} H2H directos** incorporados al modelo (peso {min(30, n_h2h*5):.0f}%)."
+        if n_h2h >= 2 else " · Sin historial H2H directo disponible."
+    )
     lines.append(
         f"**🔬 Calidad de datos:** {home} — {sample_note(n_h, h_srcs)}  "
-        f"{away} — {sample_note(n_a, a_srcs)}"
+        f"{away} — {sample_note(n_a, a_srcs)}{h2h_note}"
     )
 
     # ── Contexto motivacional ─────────────────────────────
@@ -2348,7 +2396,7 @@ def main():
     match_map = {}
     all_vb    = []
     for m in upcoming:
-        p     = match_probs(m["home_id"], m["away_id"], ratings, avg_h, avg_a)
+        p     = match_probs(m["home_id"], m["away_id"], ratings, avg_h, avg_a, hist_df=hist_mapped)
         om    = find_odds_match(m["home_name"], m["away_name"], m["date"], odds_list)
         bk    = best_odds_for(om)
         md    = int(m["matchday"]) if m["matchday"] else 0
