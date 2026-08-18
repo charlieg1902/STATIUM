@@ -277,6 +277,28 @@ st.markdown(f"""
     font-family: 'Space Grotesk', sans-serif;
   }}
 
+  /* ── Odds hero block ── */
+  .vb-odds-hero {{
+    background: linear-gradient(135deg, #0A0D12 0%, #171B22 100%);
+    border-radius: 14px; padding: 14px 20px; text-align: center;
+    min-width: 110px; border: 1px solid rgba(0,168,107,0.22);
+    box-shadow: 0 0 18px rgba(0,168,107,0.12);
+    flex-shrink: 0;
+  }}
+  .vb-odds-lbl {{
+    font-size: 0.58rem; color: #64748b; text-transform: uppercase;
+    letter-spacing: 1.2px; font-family: 'IBM Plex Mono', monospace;
+    margin-bottom: 2px;
+  }}
+  .vb-odds-num {{
+    font-size: 2.6rem; font-weight: 700; color: #00A86B; line-height: 1;
+    font-family: 'IBM Plex Mono', monospace; letter-spacing: -1px;
+  }}
+  .vb-ev-sub {{
+    font-size: 0.70rem; color: #3A404A; font-family: 'IBM Plex Mono', monospace;
+    margin-top: 4px; font-weight: 600;
+  }}
+
   /* ── Compact prob bar (inside card) ── */
   .card-prob-bar {{
     display:flex; height:20px; border-radius:4px; overflow:hidden; gap:1px;
@@ -1993,17 +2015,26 @@ def vb_card_html(vb, idx=0):
 
     return (
         f'<div class="vb-card vb-card-{vb["conf_key"]}" style="animation-delay:{delay:.2f}s">'
-        f'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">'
-        f'<div>'
-        f'<p class="vb-match">{vb["home"]} <span style="color:#94a3b8;font-weight:400">vs</span> {vb["away"]}</p>'
-        f'<p class="vb-meta">📅 {date_str} &nbsp;·&nbsp; Jornada {vb.get("matchday","?")} &nbsp;·&nbsp; Mercado: <b>{vb["label"]}</b></p>'
-        f'<div class="vb-ctx-row">{hbadge} <span style="color:#cbd5e1;font-size:.75rem;align-self:center">vs</span> {abadge}</div>'
+
+        # ── Row 1: match header ──────────────────────────────────
+        f'<p class="vb-match" style="margin:0 0 2px">{vb["home"]} <span style="color:#94a3b8;font-weight:400">vs</span> {vb["away"]}</p>'
+        f'<p class="vb-meta" style="margin:0 0 10px">📅 {date_str} &nbsp;·&nbsp; Jornada {vb.get("matchday","?")}</p>'
+
+        # ── Row 2: pick label + odds hero ───────────────────────
+        f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">'
+        f'  <div>'
+        f'    <div style="font-size:1.15rem;font-weight:700;color:#0f172a;font-family:\'Space Grotesk\',sans-serif;line-height:1.2">{vb["label"]}</div>'
+        f'    <div style="margin-top:8px"><span class="conf-tag {vb["conf_css"]}">{vb["conf_icon"]} Confianza {vb["conf_label"]}</span></div>'
+        f'    <div style="margin-top:8px" class="vb-ctx-row">{hbadge} <span style="color:#cbd5e1;font-size:.75rem;align-self:center">vs</span> {abadge}</div>'
+        f'  </div>'
+        f'  <div class="vb-odds-hero">'
+        f'    <div class="vb-odds-lbl">CUOTA</div>'
+        f'    <div class="vb-odds-num">{vb["bk_odds"]}</div>'
+        f'    <div class="vb-ev-sub">EV +{ev_pct:.1f}%</div>'
+        f'  </div>'
         f'</div>'
-        f'<div style="text-align:right">'
-        f'<div class="{vb["ev_css"]} ev-pill">📈 EV +{ev_pct:.1f}%</div>'
-        f'<div style="margin-top:6px"><span class="conf-tag {vb["conf_css"]}">{vb["conf_icon"]} Confianza {vb["conf_label"]}</span></div>'
-        f'</div>'
-        f'</div>'
+
+        # ── Row 3: prob bar + secondary details ─────────────────
         f'{prob_html}'
         f'{d_row}'
         f'{form_html}'
