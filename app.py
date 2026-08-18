@@ -827,9 +827,13 @@ def upcoming_from_odds(odds_list, season_df, days_ahead=60):
 
 @st.cache_data(ttl=7200, show_spinner=False)
 def fetch_odds(odds_key, sport_key):
-    data = _odds_get(odds_key, f"/sports/{sport_key}/odds/",
-                     {"regions":"eu","markets":"h2h,totals,btts,bookie_corners","oddsFormat":"decimal"})
-    return data if isinstance(data, list) else []
+    # Intenta mercados completos; si falla (plan free no incluye btts/corners) cae a h2h+totals
+    for markets in ["h2h,totals,btts,bookie_corners", "h2h,totals,btts", "h2h,totals", "h2h"]:
+        data = _odds_get(odds_key, f"/sports/{sport_key}/odds/",
+                         {"regions":"eu","markets":markets,"oddsFormat":"decimal"})
+        if isinstance(data, list) and len(data) > 0:
+            return data
+    return []
 
 # ═══════════════════════════════════════════════════════════
 # CONTEXTO COMPETITIVO
