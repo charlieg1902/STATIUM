@@ -2021,7 +2021,7 @@ def vb_card_html(vb, idx=0):
         f'<p class="vb-meta" style="margin:0 0 10px">📅 {date_str} &nbsp;·&nbsp; Jornada {vb.get("matchday","?")}</p>'
 
         # ── Row 2: pick label + odds hero ───────────────────────
-        f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px">'
         f'  <div>'
         f'    <div style="font-size:1.15rem;font-weight:700;color:#0f172a;font-family:\'Space Grotesk\',sans-serif;line-height:1.2">{vb["label"]}</div>'
         f'    <div style="margin-top:8px"><span class="conf-tag {vb["conf_css"]}">{vb["conf_icon"]} Confianza {vb["conf_label"]}</span></div>'
@@ -2030,13 +2030,11 @@ def vb_card_html(vb, idx=0):
         f'  <div class="vb-odds-hero">'
         f'    <div class="vb-odds-lbl">CUOTA</div>'
         f'    <div class="vb-odds-num">{vb["bk_odds"]}</div>'
-        f'    <div class="vb-ev-sub">EV +{ev_pct:.1f}%</div>'
+        f'    <div class="vb-ev-sub">Probabilidad {vb["model_p"]*100:.0f}%</div>'
         f'  </div>'
         f'</div>'
 
-        # ── Row 3: prob bar + secondary details ─────────────────
-        f'{prob_html}'
-        f'{d_row}'
+        # ── Row 3: form badges only (secondary details hidden) ───
         f'{form_html}'
         f'{alert_html}'
         f'</div>'
