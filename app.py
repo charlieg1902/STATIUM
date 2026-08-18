@@ -2272,11 +2272,14 @@ def main():
         foul_ratings,   avg_fh, avg_fa  = build_stat_ratings(hist_mapped, "home_fouls",   "away_fouls")
 
     # ── Metrics bar ──────────────────────────────────────────
+    _season_matches = len(season_df) if not season_df.empty else 0
+    _hist_matches   = len(hist_mapped) if not hist_mapped.empty else 0
+    _data_label     = f"J26/27: {_season_matches}" if _season_matches > 0 else f"Historial: {_hist_matches}"
     mc = st.columns(5)
     for col, num, label in zip(mc, [
-        len(season_df), len(ratings), len(upcoming),
+        _data_label, len(ratings), len(upcoming),
         len(odds_list), len(standings_df)
-    ], ["Partidos históricos","Equipos con rating","Próximos partidos",
+    ], ["Datos del modelo","Equipos con rating","Próximos partidos",
         "Mercados con cuotas","Equipos en tabla"]):
         col.markdown(f"""
         <div class="stat-card">
