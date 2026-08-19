@@ -400,6 +400,14 @@ LEAGUES = {
     "🇫🇷 Ligue 1":         {"fd":"FL1", "odds":"soccer_france_ligue_one",   "games":34,"teams":18,"cl":3,"euro":5,"rel":3},
 }
 
+LEAGUE_THEMES = {
+    "🇬🇧 Premier League": {"accent":"#37003c","light":"rgba(55,0,60,0.07)","bg":"rgba(55,0,60,0.025)"},
+    "🇪🇸 La Liga":         {"accent":"#FF4B00","light":"rgba(255,75,0,0.08)","bg":"rgba(255,75,0,0.020)"},
+    "🇮🇹 Serie A":         {"accent":"#024494","light":"rgba(2,68,148,0.08)","bg":"rgba(2,68,148,0.025)"},
+    "🇩🇪 Bundesliga":      {"accent":"#d20515","light":"rgba(210,5,21,0.08)","bg":"rgba(210,5,21,0.020)"},
+    "🇫🇷 Ligue 1":         {"accent":"#1e3e73","light":"rgba(30,62,115,0.08)","bg":"rgba(30,62,115,0.025)"},
+}
+
 def _season_start_year():
     """Año de inicio de la temporada activa o próxima. Ej: agosto 2026 → 2026 (temporada 26/27)."""
     now = datetime.utcnow()
@@ -2226,6 +2234,19 @@ def main():
             st.session_state["sel_date"] = "all"
             st.session_state["_last_league"] = league_name
         lc = LEAGUES[league_name]
+        # ── Tema dinámico por liga ───────────────────────────
+        _th = LEAGUE_THEMES.get(league_name, {"accent":"#00A86B","light":"rgba(0,168,107,0.07)","bg":"rgba(0,168,107,0.02)"})
+        st.markdown(f"""<style>
+        /* Bloquear edición del selectbox */
+        [data-testid="stSelectbox"] input {{pointer-events:none!important;caret-color:transparent!important;}}
+        /* Tema de liga */
+        .vb-card-high   {{border-left-color:{_th['accent']}!important;box-shadow:0 4px 20px {_th['light']}!important;}}
+        .vb-card-medium {{border-left-color:{_th['accent']}!important;opacity:.92;}}
+        .vb-odds-hero   {{background:linear-gradient(135deg,{_th['accent']},{_th['accent']}cc)!important;}}
+        section[data-testid="stMain"] > div:first-child {{background:{_th['bg']}!important;}}
+        .vb-odds-num    {{color:white!important;}}
+        .vb-odds-lbl,.vb-ev-sub,.vb-bk-tag {{color:rgba(255,255,255,0.75)!important;}}
+        </style>""", unsafe_allow_html=True)
         if _off_season and not lc.get("is_tournament"):
             _now = datetime.utcnow()
             _wc_active = _now.month == 6 or (_now.month == 7 and _now.day <= 19)
@@ -2242,7 +2263,8 @@ def main():
         # Ventana de búsqueda: torneos usan ventana amplia (90 días) para capturar
         # todo el calendario; ligas usan 21 días (filtrado por calendario en la vista)
         days_ahead  = 90 if lc.get("is_tournament") else 21
-        ev_min_pct  = st.slider("🎯 EV mínimo (%)", 2, 12, 4)
+        ev_min_pct  = st.slider("🎯 EV mínimo (%)", 2, 12, 4,
+            help="EV = Expected Value (Valor Esperado). Un EV de +5% significa que por cada 100€ apostados, el modelo estima ganar 5€ en promedio a largo plazo. Filtra solo apuestas donde el modelo detecta que las cuotas del bookmaker subestiman la probabilidad real.")
         ev_threshold = ev_min_pct / 100
         bankroll = st.number_input("💰 Bankroll (u.)", min_value=0.0, value=100.0, step=10.0,
                                    help="Tu bankroll total. Kelly 25% te dirá cuántas unidades apostar.")
