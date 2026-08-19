@@ -2210,7 +2210,7 @@ def main():
       <div>
         <div class="stat-title">STATIUM</div>
         <div class="stat-tagline">Sports Intelligence. Predict The Edge.</div>
-        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.1</div>
+        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.2-diag</div>
       </div>
     </div>
     <div class="grad-line"></div>
@@ -2789,7 +2789,11 @@ def main():
                             f'</div>'
                             f'{_form_row}{_alert_html}</div>'
                         )
-                        st.markdown(_card_html, unsafe_allow_html=True)
+                        # DIAG: show type and first 80 chars
+                        if not isinstance(_card_html, str) or len(_card_html) < 10:
+                            st.error(f"BAD CARD: type={type(_card_html).__name__} repr={repr(_card_html)[:120]}")
+                        else:
+                            st.markdown(_card_html, unsafe_allow_html=True)
                 with col_why:
                     st.markdown(
                         '<div style="font-size:.66rem;font-weight:700;color:#94a3b8;letter-spacing:.8px;'
