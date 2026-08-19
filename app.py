@@ -2745,11 +2745,51 @@ def main():
                 col_picks, col_why = st.columns([3, 2])
                 with col_picks:
                     for idx, vb in enumerate(vbs):
-                        _card = vb_card_html(vb, idx)
-                        if _card is None:
-                            st.error(f"ERROR: vb_card_html returned None for {vb.get('home','?')} vs {vb.get('away','?')}")
-                        else:
-                            st.markdown(_card, unsafe_allow_html=True)
+                        _h = str(vb.get("home","?"))
+                        _a = str(vb.get("away","?"))
+                        _lbl = str(vb.get("label","?"))
+                        _odds = str(vb.get("bk_odds","?"))
+                        _prob = int(vb.get("model_p",0)*100)
+                        _conf_css = str(vb.get("conf_css","conf-medium"))
+                        _conf_icon = str(vb.get("conf_icon","🟡"))
+                        _conf_label = str(vb.get("conf_label","Media"))
+                        _ck = str(vb.get("conf_key","medium"))
+                        _delay = idx * 0.07
+                        _date = fmt_match_dt(vb.get("date",""))
+                        _md = vb.get("matchday","?")
+                        _bk_tag = f'<div class="vb-bk-tag">{vb["bookmaker"]}</div>' if vb.get("bookmaker") else ""
+                        _hbadge = ctx_badge_html(vb.get("home_ctx",{"label":"","emoji":"","css":"ctx-mid"}))
+                        _abadge = ctx_badge_html(vb.get("away_ctx",{"label":"","emoji":"","css":"ctx-mid"}))
+                        _form_h = vb.get("home_form",[])
+                        _form_a = vb.get("away_form",[])
+                        _fh = render_form_mini(_form_h) if _form_h else ""
+                        _fa = render_form_mini(_form_a) if _form_a else ""
+                        _form_row = (
+                            f'<div style="display:flex;gap:18px;margin-top:8px;align-items:center;flex-wrap:wrap">'
+                            f'<div style="display:flex;align-items:center;gap:5px"><span style="font-size:.68rem;color:#94a3b8">Local</span>{_fh}</div>'
+                            f'<div style="display:flex;align-items:center;gap:5px"><span style="font-size:.68rem;color:#94a3b8">Visit.</span>{_fa}</div></div>'
+                        ) if (_form_h or _form_a) else ""
+                        _alert_html = "".join(f'<div class="ctx-alert">{a}</div>' for a in vb.get("ctx_alerts",[]))
+                        _card_html = (
+                            f'<div class="vb-card vb-card-{_ck}" style="animation-delay:{_delay:.2f}s">'
+                            f'<p class="vb-match" style="margin:0 0 2px">{_h} <span style="color:#94a3b8;font-weight:400">vs</span> {_a}</p>'
+                            f'<p class="vb-meta" style="margin:0 0 10px">📅 {_date} &nbsp;·&nbsp; Jornada {_md}</p>'
+                            f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px">'
+                            f'  <div>'
+                            f'    <div style="font-size:1.15rem;font-weight:700;color:#0f172a;font-family:\'Space Grotesk\',sans-serif;line-height:1.2">{_lbl}</div>'
+                            f'    <div style="margin-top:8px"><span class="conf-tag {_conf_css}">{_conf_icon} Confianza {_conf_label}</span></div>'
+                            f'    <div style="margin-top:8px" class="vb-ctx-row">{_hbadge} <span style="color:#cbd5e1;font-size:.75rem;align-self:center">vs</span> {_abadge}</div>'
+                            f'  </div>'
+                            f'  <div class="vb-odds-hero">'
+                            f'    <div class="vb-odds-lbl">CUOTA</div>'
+                            f'    <div class="vb-odds-num">{_odds}</div>'
+                            f'    <div class="vb-ev-sub">Probabilidad {_prob}%</div>'
+                            f'    {_bk_tag}'
+                            f'  </div>'
+                            f'</div>'
+                            f'{_form_row}{_alert_html}</div>'
+                        )
+                        st.markdown(_card_html, unsafe_allow_html=True)
                 with col_why:
                     st.markdown(
                         '<div style="font-size:.66rem;font-weight:700;color:#94a3b8;letter-spacing:.8px;'
