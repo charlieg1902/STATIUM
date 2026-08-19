@@ -2022,6 +2022,18 @@ def vb_card_html(vb, idx=0):
         return f'<div style="color:red;padding:12px;border:1px solid red;border-radius:8px;margin:6px 0"><b>Error en tarjeta:</b> {_e}</div>'
 
 def _vb_card_html_inner(vb, idx=0):
+    # TEST — si ves esto, la función se llama correctamente
+    _home = vb.get("home","?")
+    _away = vb.get("away","?")
+    _odds = vb.get("bk_odds","?")
+    _label = vb.get("label","?")
+    _prob  = round(vb.get("model_p",0)*100)
+    return (
+        f'<div style="border:2px solid #00A86B;border-radius:12px;padding:16px;margin:8px 0;background:white">'
+        f'<b>{_home} vs {_away}</b> — {_label}<br>'
+        f'Cuota: <b>{_odds}</b> &nbsp;|&nbsp; Prob: {_prob}%'
+        f'</div>'
+    )
     date_str = fmt_match_dt(vb["date"])
     hctx, actx = vb["home_ctx"], vb["away_ctx"]
     ev_pct   = vb["ev"]*100
