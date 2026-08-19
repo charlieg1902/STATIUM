@@ -2210,7 +2210,7 @@ def main():
       <div>
         <div class="stat-title">STATIUM</div>
         <div class="stat-tagline">Sports Intelligence. Predict The Edge.</div>
-        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.3-diag</div>
+        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.4-diag</div>
       </div>
     </div>
     <div class="grad-line"></div>
@@ -2679,11 +2679,14 @@ def main():
         upcoming_view = [m for m in upcoming if m["date"][:10] == sel_date]
         all_vb_view   = [v for v in all_vb if v["date"][:10] == sel_date]
 
+    # ── DIAG: marker before tabs ──────────────────────────────
+    st.markdown('<div style="background:#ff0;color:#000;padding:8px;font-weight:bold">>>> ANTES DE TABS <<<</div>', unsafe_allow_html=True)
     # ── Tabs ─────────────────────────────────────────────────
     t1, t2, t3, t4, t5 = st.tabs(["🎯 Value Bets","🗓️ Partidos","🔍 Equipo","📋 Clasificación","📈 Tracker"])
 
     # ─── TAB 1: VALUE BETS ────────────────────────────────────
     with t1:
+        st.markdown('<div style="background:#0f0;color:#000;padding:8px;font-weight:bold">>>> DENTRO DE T1 <<<</div>', unsafe_allow_html=True)
         st.markdown(f"### 🎯 Value Bets · {league_name}")
         ALL_CONF    = ["Alta","Media","Baja"]
         ALL_MARKETS = ["1X2","Over/Under Goles","BTTS","Córners","Tiros","Tiros al Arco"]
