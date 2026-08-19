@@ -2210,7 +2210,7 @@ def main():
       <div>
         <div class="stat-title">STATIUM</div>
         <div class="stat-tagline">Sports Intelligence. Predict The Edge.</div>
-        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo</div>
+        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.1</div>
       </div>
     </div>
     <div class="grad-line"></div>
@@ -2745,7 +2745,11 @@ def main():
                 col_picks, col_why = st.columns([3, 2])
                 with col_picks:
                     for idx, vb in enumerate(vbs):
-                        st.markdown(vb_card_html(vb, idx), unsafe_allow_html=True)
+                        _card = vb_card_html(vb, idx)
+                        if _card is None:
+                            st.error(f"ERROR: vb_card_html returned None for {vb.get('home','?')} vs {vb.get('away','?')}")
+                        else:
+                            st.markdown(_card, unsafe_allow_html=True)
                 with col_why:
                     st.markdown(
                         '<div style="font-size:.66rem;font-weight:700;color:#94a3b8;letter-spacing:.8px;'
