@@ -2016,6 +2016,12 @@ def _corner_shot_detail_html(vb):
     return "".join(parts)
 
 def vb_card_html(vb, idx=0):
+    try:
+        return _vb_card_html_inner(vb, idx)
+    except Exception as _e:
+        return f'<div style="color:red;padding:12px;border:1px solid red;border-radius:8px;margin:6px 0"><b>Error en tarjeta:</b> {_e}</div>'
+
+def _vb_card_html_inner(vb, idx=0):
     date_str = fmt_match_dt(vb["date"])
     hctx, actx = vb["home_ctx"], vb["away_ctx"]
     ev_pct   = vb["ev"]*100
