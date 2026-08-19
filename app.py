@@ -2079,15 +2079,12 @@ def vb_card_html(vb, idx=0):
 
     hbadge = ctx_badge_html(hctx)
     abadge = ctx_badge_html(actx)
+    bk_tag = f'<div class="vb-bk-tag">{vb["bookmaker"]}</div>' if vb.get("bookmaker") else ""
 
-    return (
+    html = (
         f'<div class="vb-card vb-card-{vb["conf_key"]}" style="animation-delay:{delay:.2f}s">'
-
-        # ── Row 1: match header ──────────────────────────────────
         f'<p class="vb-match" style="margin:0 0 2px">{vb["home"]} <span style="color:#94a3b8;font-weight:400">vs</span> {vb["away"]}</p>'
         f'<p class="vb-meta" style="margin:0 0 10px">📅 {date_str} &nbsp;·&nbsp; Jornada {vb.get("matchday","?")}</p>'
-
-        # ── Row 2: pick label + odds hero ───────────────────────
         f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px">'
         f'  <div>'
         f'    <div style="font-size:1.15rem;font-weight:700;color:#0f172a;font-family:\'Space Grotesk\',sans-serif;line-height:1.2">{vb["label"]}</div>'
@@ -2098,15 +2095,14 @@ def vb_card_html(vb, idx=0):
         f'    <div class="vb-odds-lbl">CUOTA</div>'
         f'    <div class="vb-odds-num">{vb["bk_odds"]}</div>'
         f'    <div class="vb-ev-sub">Probabilidad {vb["model_p"]*100:.0f}%</div>'
-        + (f'    <div class="vb-bk-tag">{vb["bookmaker"]}</div>' if vb.get("bookmaker") else '') +
+        f'    {bk_tag}'
         f'  </div>'
         f'</div>'
-
-        # ── Row 3: form badges only (secondary details hidden) ───
         f'{form_html}'
         f'{alert_html}'
         f'</div>'
     )
+    return html
 
 # ═══════════════════════════════════════════════════════════
 # SIDEBAR SUMMARY (rendered after pre-compute)
