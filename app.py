@@ -249,6 +249,12 @@ st.markdown(f"""
   .conf-medium {{ background: rgba(58,64,74,0.07);  color: {BRAND_STEEL}; border: 1px solid rgba(58,64,74,0.20); }}
   .conf-low    {{ background: rgba(217,119,6,0.09); color: {BRAND_AMBER}; border: 1px solid rgba(217,119,6,0.22); }}
 
+  .vb-bk-tag {{
+    font-size: 0.60rem; color: #94a3b8; margin-top: 3px;
+    font-family: 'IBM Plex Mono', monospace; letter-spacing: .3px;
+    text-transform: uppercase;
+  }}
+
   .vb-details {{
     font-size: 0.82rem; color: #475569; margin-top: 10px;
     display: flex; flex-wrap: wrap; gap: 14px;
@@ -387,7 +393,6 @@ def fmt_match_dt(date_str, fmt="%a %d/%m · %H:%M"):
     return to_lima(dt).strftime(fmt) + " (PE)"
 
 LEAGUES = {
-    "🌍 Mundial 2026":     {"fd":"WC",  "odds":"soccer_fifa_world_cup",     "games":3, "teams":4, "cl":2,"euro":0,"rel":1,"is_tournament":True,"featured":True},
     "🇬🇧 Premier League": {"fd":"PL",  "odds":"soccer_epl",               "games":38,"teams":20,"cl":4,"euro":6,"rel":3},
     "🇪🇸 La Liga":         {"fd":"PD",  "odds":"soccer_spain_la_liga",      "games":38,"teams":20,"cl":4,"euro":7,"rel":3},
     "🇮🇹 Serie A":         {"fd":"SA",  "odds":"soccer_italy_serie_a",      "games":38,"teams":20,"cl":4,"euro":7,"rel":3},
@@ -1260,37 +1265,41 @@ def find_odds_match(fd_home, fd_away, fd_date_str, odds_list):
     return best
 
 def best_odds_for(om):
-    best={"h2h_1":0,"h2h_x":0,"h2h_2":0,"o15":0,"u15":0,"o25":0,"u25":0,"o35":0,"u35":0,
-          "btts_yes":0,"btts_no":0,
-          "c85":0,"c95":0,"c105":0,"c115":0,"uc85":0,"uc95":0,"uc105":0,"uc115":0}
-    if not om: return best
+    keys = ["h2h_1","h2h_x","h2h_2","o15","u15","o25","u25","o35","u35",
+            "btts_yes","btts_no",
+            "c85","c95","c105","c115","uc85","uc95","uc105","uc115"]
+    best   = {k: 0  for k in keys}
+    best_bk = {k: "" for k in keys}  # bookmaker que ofrece la mejor cuota
+    if not om: return best, best_bk
     ht,at=om.get("home_team",""),om.get("away_team","")
     for bk in om.get("bookmakers",[]):
+        bk_title = bk.get("title","")
         for mkt in bk.get("markets",[]):
+            def _upd(key, price):
+                if price > best[key]:
+                    best[key] = price
+                    best_bk[key] = bk_title
             if mkt["key"]=="h2h":
                 for oc in mkt.get("outcomes",[]):
                     p,n=float(oc.get("price",0)),oc.get("name","")
-                    if   _sim(n,ht)>0.7: best["h2h_1"]=max(best["h2h_1"],p)
-                    elif _sim(n,at)>0.7: best["h2h_2"]=max(best["h2h_2"],p)
-                    elif "draw" in n.lower(): best["h2h_x"]=max(best["h2h_x"],p)
+                    if   _sim(n,ht)>0.7: _upd("h2h_1",p)
+                    elif _sim(n,at)>0.7: _upd("h2h_2",p)
+                    elif "draw" in n.lower(): _upd("h2h_x",p)
             elif mkt["key"]=="totals":
                 for oc in mkt.get("outcomes",[]):
                     pt,pr=float(oc.get("point",0)),float(oc.get("price",0))
                     nm=oc.get("name","").lower()
                     if   abs(pt-1.5)<0.01:
-                        if nm=="over":  best["o15"]=max(best["o15"],pr)
-                        else:           best["u15"]=max(best["u15"],pr)
+                        _upd("o15",pr) if nm=="over" else _upd("u15",pr)
                     elif abs(pt-2.5)<0.01:
-                        if nm=="over":  best["o25"]=max(best["o25"],pr)
-                        else:           best["u25"]=max(best["u25"],pr)
+                        _upd("o25",pr) if nm=="over" else _upd("u25",pr)
                     elif abs(pt-3.5)<0.01:
-                        if nm=="over":  best["o35"]=max(best["o35"],pr)
-                        else:           best["u35"]=max(best["u35"],pr)
+                        _upd("o35",pr) if nm=="over" else _upd("u35",pr)
             elif mkt["key"] in ("btts","both_teams_to_score"):
                 for oc in mkt.get("outcomes",[]):
                     p,n=float(oc.get("price",0)),oc.get("name","").lower()
-                    if "yes" in n: best["btts_yes"]=max(best["btts_yes"],p)
-                    elif "no" in n: best["btts_no"]=max(best["btts_no"],p)
+                    if "yes" in n: _upd("btts_yes",p)
+                    elif "no" in n: _upd("btts_no",p)
             elif mkt["key"] in ("bookie_corners","corners","total_corners"):
                 for oc in mkt.get("outcomes",[]):
                     pt = float(oc.get("point", 0))
@@ -1300,9 +1309,9 @@ def best_odds_for(om):
                                 10.5:("c105","uc105"), 11.5:("c115","uc115")}
                     if pt in line_map:
                         ok, uk = line_map[pt]
-                        if nm == "over":  best[ok]  = max(best[ok],  pr)
-                        elif nm == "under": best[uk] = max(best[uk], pr)
-    return best
+                        if nm == "over":  _upd(ok, pr)
+                        elif nm == "under": _upd(uk, pr)
+    return best, best_bk
 
 def kelly_criterion(model_p, bk_odds, fraction=0.25):
     b = bk_odds - 1
@@ -1316,8 +1325,16 @@ def conf_info(edge):
     elif edge>=0.07: return "Media", "medium","🟡","ev-medium","conf-medium"
     else:            return "Baja",  "low",   "🟠","ev-low","conf-low"
 
-def detect_value_bets(probs, bk, home_name, away_name, ev_threshold, corner_probs=None):
+def detect_value_bets(probs, bk, home_name, away_name, ev_threshold, corner_probs=None, bk_names=None):
     if not probs: return []
+    bk_names = bk_names or {}
+    mkt_to_key = {
+        "1 Local":"h2h_1","X Empate":"h2h_x","2 Visitante":"h2h_2",
+        "Over 1.5":"o15","Under 1.5":"u15","Over 2.5":"o25","Under 2.5":"u25",
+        "Over 3.5":"o35","Under 3.5":"u35","BTTS Sí":"btts_yes","BTTS No":"btts_no",
+        "Córners +8.5":"c85","Córners -8.5":"uc85","Córners +9.5":"c95","Córners -9.5":"uc95",
+        "Córners +10.5":"c105","Córners -10.5":"uc105","Córners +11.5":"c115","Córners -11.5":"uc115",
+    }
     checks=[
         ("1 Local",       probs["home_win"],  bk["h2h_1"]),
         ("X Empate",      probs["draw"],       bk["h2h_x"]),
@@ -1350,12 +1367,14 @@ def detect_value_bets(probs, bk, home_name, away_name, ev_threshold, corner_prob
         implied=1/bk_odd; edge=model_p-implied
         if edge>MAX_EDGE: continue
         cl,ck,ci,ev_css,conf_css=conf_info(edge)
+        bk_source = bk_names.get(mkt_to_key.get(label,""), "")
         found.append({"label":label,"model_p":round(model_p,4),"implied":round(implied,4),
                       "edge":round(edge,4),"bk_odds":bk_odd,"ev":round(ev,4),
                       "conf_label":cl,"conf_key":ck,"conf_icon":ci,
                       "ev_css":ev_css,"conf_css":conf_css,
                       "kelly":kelly_criterion(model_p, bk_odd),
-                      "home":home_name,"away":away_name})
+                      "home":home_name,"away":away_name,
+                      "bookmaker": bk_source})
     return found
 
 def suggest_top_market(probs, bk):
@@ -2079,6 +2098,7 @@ def vb_card_html(vb, idx=0):
         f'    <div class="vb-odds-lbl">CUOTA</div>'
         f'    <div class="vb-odds-num">{vb["bk_odds"]}</div>'
         f'    <div class="vb-ev-sub">Probabilidad {vb["model_p"]*100:.0f}%</div>'
+        + (f'    <div class="vb-bk-tag">{vb["bookmaker"]}</div>' if vb.get("bookmaker") else '') +
         f'  </div>'
         f'</div>'
 
@@ -2398,7 +2418,7 @@ def main():
     for m in upcoming:
         p     = match_probs(m["home_id"], m["away_id"], ratings, avg_h, avg_a, hist_df=hist_mapped)
         om    = find_odds_match(m["home_name"], m["away_name"], m["date"], odds_list)
-        bk    = best_odds_for(om)
+        bk, bk_names = best_odds_for(om)
         md    = int(m["matchday"]) if m["matchday"] else 0
         avg_played = int(standings_df["played"].mean()) if not standings_df.empty else md
         remaining  = max(0, lc["games"] - avg_played)
@@ -2421,7 +2441,7 @@ def main():
         sp   = stat_ou_probs(m["home_id"], m["away_id"], shot_ratings,   avg_sh, avg_sa, SHOT_LINES)   if shot_ratings   else None
         sotp = stat_ou_probs(m["home_id"], m["away_id"], sot_ratings, avg_soth, avg_sota, SOT_LINES)   if sot_ratings    else None
 
-        vbets = detect_value_bets(p, bk, m["home_name"], m["away_name"], ev_threshold, corner_probs=cp)
+        vbets = detect_value_bets(p, bk, m["home_name"], m["away_name"], ev_threshold, corner_probs=cp, bk_names=bk_names)
         for vb in vbets:
             vb.update({
                 "date":     m["date"],
