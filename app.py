@@ -2210,7 +2210,7 @@ def main():
       <div>
         <div class="stat-title">STATIUM</div>
         <div class="stat-tagline">Sports Intelligence. Predict The Edge.</div>
-        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.2-diag</div>
+        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.3-diag</div>
       </div>
     </div>
     <div class="grad-line"></div>
@@ -2789,11 +2789,9 @@ def main():
                             f'</div>'
                             f'{_form_row}{_alert_html}</div>'
                         )
-                        # DIAG: show type and first 80 chars
-                        if not isinstance(_card_html, str) or len(_card_html) < 10:
-                            st.error(f"BAD CARD: type={type(_card_html).__name__} repr={repr(_card_html)[:120]}")
-                        else:
-                            st.markdown(_card_html, unsafe_allow_html=True)
+                        # DIAG v2.3: hardcoded red box — should NEVER show "None"
+                        st.markdown('<div style="background:red;color:white;padding:12px;border-radius:8px;margin:4px 0;font-weight:bold">TEST-CARD-OK</div>', unsafe_allow_html=True)
+                        st.write(f"home={vb.get('home')} label={vb.get('label')} odds={vb.get('bk_odds')}")
                 with col_why:
                     st.markdown(
                         '<div style="font-size:.66rem;font-weight:700;color:#94a3b8;letter-spacing:.8px;'
