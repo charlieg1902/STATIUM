@@ -2210,7 +2210,7 @@ def main():
       <div>
         <div class="stat-title">STATIUM</div>
         <div class="stat-tagline">Sports Intelligence. Predict The Edge.</div>
-        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.6-diag</div>
+        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.7-diag</div>
       </div>
     </div>
     <div class="grad-line"></div>
@@ -2480,7 +2480,9 @@ def main():
         sotp = stat_ou_probs(m["home_id"], m["away_id"], sot_ratings, avg_soth, avg_sota, SOT_LINES)   if sot_ratings    else None
 
         vbets = detect_value_bets(p, bk, m["home_name"], m["away_name"], ev_threshold, corner_probs=cp, bk_names=bk_names)
+        st.markdown(f"**DIAG-VBETS: {m['home_name']} vs {m['away_name']} → {len(vbets)} vbets**")
         for vb in vbets:
+            st.markdown(f"**DIAG-VB-A: {vb.get('label','?')}**")
             vb.update({
                 "date":     m["date"],
                 "matchday": md,
@@ -2496,7 +2498,9 @@ def main():
                 "shot_probs":   sp,
                 "sot_probs":    sotp,
             })
+            st.markdown(f"**DIAG-VB-B: after update**")
             all_vb.append(vb)
+            st.markdown(f"**DIAG-VB-C: after append, total={len(all_vb)}**")
         match_map[m["id"]] = {"p":p,"bk":bk,"vbets":vbets,"hctx":hctx,"actx":actx,
                                "alerts":alerts,"md":md,"hform":hform,"aform":aform,
                                "cp":cp,"sp":sp,"sotp":sotp}
