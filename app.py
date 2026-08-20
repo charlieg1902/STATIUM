@@ -2684,7 +2684,6 @@ def main():
 
     # ─── TAB 1: VALUE BETS ────────────────────────────────────
     with t1:
-        st.markdown('<div style="background:#0f0;color:#000;padding:8px;font-weight:bold">>>> DENTRO DE T1 <<<</div>', unsafe_allow_html=True)
         st.markdown(f"### 🎯 Value Bets · {league_name}")
         ALL_CONF    = ["Alta","Media","Baja"]
         ALL_MARKETS = ["1X2","Over/Under Goles","BTTS","Córners","Tiros","Tiros al Arco"]
