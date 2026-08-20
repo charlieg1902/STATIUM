@@ -2210,7 +2210,7 @@ def main():
       <div>
         <div class="stat-title">STATIUM</div>
         <div class="stat-tagline">Sports Intelligence. Predict The Edge.</div>
-        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.8-diag</div>
+        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.9-diag</div>
       </div>
     </div>
     <div class="grad-line"></div>
@@ -2500,7 +2500,7 @@ def main():
                 "sot_probs":    sotp,
             })
             st.markdown(f"**DIAG-VB-B: after update**")
-            all_vb.append(vb)
+            all_vb += [vb]
             st.markdown(f"**DIAG-VB-C: after append, total={len(all_vb)}**")
         match_map[m["id"]] = {"p":p,"bk":bk,"vbets":vbets,"hctx":hctx,"actx":actx,
                                "alerts":alerts,"md":md,"hform":hform,"aform":aform,
