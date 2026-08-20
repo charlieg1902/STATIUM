@@ -2210,7 +2210,7 @@ def main():
       <div>
         <div class="stat-title">STATIUM</div>
         <div class="stat-tagline">Sports Intelligence. Predict The Edge.</div>
-        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.7-diag</div>
+        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.8-diag</div>
       </div>
     </div>
     <div class="grad-line"></div>
@@ -2454,6 +2454,7 @@ def main():
     all_vb    = []
     st.markdown(f"**DIAG-A2: upcoming tiene {len(upcoming)} partidos**")
     for m in upcoming:
+        st.markdown(f"**DIAG-ITER: {m.get('home_name','?')} vs {m.get('away_name','?')}**")
         p     = match_probs(m["home_id"], m["away_id"], ratings, avg_h, avg_a, hist_df=hist_mapped)
         om    = find_odds_match(m["home_name"], m["away_name"], m["date"], odds_list)
         bk, bk_names = best_odds_for(om)
