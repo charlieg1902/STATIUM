@@ -2210,7 +2210,7 @@ def main():
       <div>
         <div class="stat-title">STATIUM</div>
         <div class="stat-tagline">Sports Intelligence. Predict The Edge.</div>
-        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.10-diag</div>
+        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v3.0</div>
       </div>
     </div>
     <div class="grad-line"></div>
@@ -2439,7 +2439,6 @@ def main():
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
-    st.markdown("**DIAG-A: después de métricas**")
 
     if not odds_list and not is_tournament:
         st.warning(
@@ -2452,9 +2451,7 @@ def main():
     # ── Pre-compute ──────────────────────────────────────────
     match_map = {}
     all_vb    = []
-    st.markdown(f"**DIAG-A2: upcoming tiene {len(upcoming)} partidos**")
     for m in upcoming:
-        st.markdown(f"**DIAG-ITER: {m.get('home_name','?')} vs {m.get('away_name','?')}**")
         p     = match_probs(m["home_id"], m["away_id"], ratings, avg_h, avg_a, hist_df=hist_mapped)
         om    = find_odds_match(m["home_name"], m["away_name"], m["date"], odds_list)
         bk, bk_names = best_odds_for(om)
@@ -2481,9 +2478,7 @@ def main():
         sotp = stat_ou_probs(m["home_id"], m["away_id"], sot_ratings, avg_soth, avg_sota, SOT_LINES)   if sot_ratings    else None
 
         vbets = detect_value_bets(p, bk, m["home_name"], m["away_name"], ev_threshold, corner_probs=cp, bk_names=bk_names)
-        st.markdown(f"**DIAG-VBETS: {m['home_name']} vs {m['away_name']} → {len(vbets)} vbets**")
         for vb in vbets:
-            st.markdown(f"**DIAG-VB-A: {vb.get('label','?')}**")
             vb = {**vb,
                 "date":     m["date"],
                 "matchday": md,
@@ -2499,20 +2494,15 @@ def main():
                 "shot_probs":   sp,
                 "sot_probs":    sotp,
             }
-            st.markdown(f"**DIAG-VB-B: after update**")
             all_vb += [vb]
-            st.markdown(f"**DIAG-VB-C: after append, total={len(all_vb)}**")
         match_map[m["id"]] = {"p":p,"bk":bk,"vbets":vbets,"hctx":hctx,"actx":actx,
                                "alerts":alerts,"md":md,"hform":hform,"aform":aform,
                                "cp":cp,"sp":sp,"sotp":sotp}
 
-    st.markdown(f"**DIAG-A3: loop done, all_vb={len(all_vb)}**")
     all_vb.sort(key=lambda x: x["ev"], reverse=True)
-    st.markdown(f"**DIAG-B: pre-compute done, {len(all_vb)} value bets**")
 
     # ── Sidebar – Part 2: Summary + Calendario ───────────────
     render_sidebar_summary(all_vb, lc, ev_min_pct)
-    st.markdown("**DIAG-C: sidebar summary done**")
 
     # Mapa de fechas con partidos
     match_dates_map: dict = {}
@@ -2680,7 +2670,6 @@ def main():
                         unsafe_allow_html=True
                     )
 
-    st.markdown("**DIAG-D: sidebar calendar done**")
     # Aplicar filtro de fecha a la lista de próximos partidos y value bets
     sel_date = st.session_state.get("sel_date", "all")
     if sel_date == "all":
@@ -2690,8 +2679,6 @@ def main():
         upcoming_view = [m for m in upcoming if m["date"][:10] == sel_date]
         all_vb_view   = [v for v in all_vb if v["date"][:10] == sel_date]
 
-    # ── DIAG: marker before tabs ──────────────────────────────
-    st.markdown('<div style="background:#ff0;color:#000;padding:8px;font-weight:bold">>>> ANTES DE TABS <<<</div>', unsafe_allow_html=True)
     # ── Tabs ─────────────────────────────────────────────────
     t1, t2, t3, t4, t5 = st.tabs(["🎯 Value Bets","🗓️ Partidos","🔍 Equipo","📋 Clasificación","📈 Tracker"])
 
@@ -2803,9 +2790,7 @@ def main():
                             f'</div>'
                             f'{_form_row}{_alert_html}</div>'
                         )
-                        # DIAG v2.3: hardcoded red box — should NEVER show "None"
-                        st.markdown('<div style="background:red;color:white;padding:12px;border-radius:8px;margin:4px 0;font-weight:bold">TEST-CARD-OK</div>', unsafe_allow_html=True)
-                        st.write(f"home={vb.get('home')} label={vb.get('label')} odds={vb.get('bk_odds')}")
+                        st.markdown(_card_html, unsafe_allow_html=True)
                 with col_why:
                     st.markdown(
                         '<div style="font-size:.66rem;font-weight:700;color:#94a3b8;letter-spacing:.8px;'
