@@ -2210,7 +2210,7 @@ def main():
       <div>
         <div class="stat-title">STATIUM</div>
         <div class="stat-tagline">Sports Intelligence. Predict The Edge.</div>
-        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.4-diag</div>
+        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.5-diag</div>
       </div>
     </div>
     <div class="grad-line"></div>
@@ -2439,6 +2439,7 @@ def main():
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
+    st.markdown("**DIAG-A: después de métricas**")
 
     if not odds_list and not is_tournament:
         st.warning(
@@ -2500,9 +2501,11 @@ def main():
                                "cp":cp,"sp":sp,"sotp":sotp}
 
     all_vb.sort(key=lambda x: x["ev"], reverse=True)
+    st.markdown(f"**DIAG-B: pre-compute done, {len(all_vb)} value bets**")
 
     # ── Sidebar – Part 2: Summary + Calendario ───────────────
     render_sidebar_summary(all_vb, lc, ev_min_pct)
+    st.markdown("**DIAG-C: sidebar summary done**")
 
     # Mapa de fechas con partidos
     match_dates_map: dict = {}
@@ -2670,6 +2673,7 @@ def main():
                         unsafe_allow_html=True
                     )
 
+    st.markdown("**DIAG-D: sidebar calendar done**")
     # Aplicar filtro de fecha a la lista de próximos partidos y value bets
     sel_date = st.session_state.get("sel_date", "all")
     if sel_date == "all":
