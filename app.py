@@ -2210,7 +2210,7 @@ def main():
       <div>
         <div class="stat-title">STATIUM</div>
         <div class="stat-tagline">Sports Intelligence. Predict The Edge.</div>
-        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.9-diag</div>
+        <div class="stat-subtitle">Detección de value bets · Modelo Poisson Calibrado · Contexto Competitivo · v2.10-diag</div>
       </div>
     </div>
     <div class="grad-line"></div>
@@ -2484,7 +2484,7 @@ def main():
         st.markdown(f"**DIAG-VBETS: {m['home_name']} vs {m['away_name']} → {len(vbets)} vbets**")
         for vb in vbets:
             st.markdown(f"**DIAG-VB-A: {vb.get('label','?')}**")
-            vb.update({
+            vb = {**vb,
                 "date":     m["date"],
                 "matchday": md,
                 "home_ctx": hctx,
@@ -2498,7 +2498,7 @@ def main():
                 "corner_probs": cp,
                 "shot_probs":   sp,
                 "sot_probs":    sotp,
-            })
+            }
             st.markdown(f"**DIAG-VB-B: after update**")
             all_vb += [vb]
             st.markdown(f"**DIAG-VB-C: after append, total={len(all_vb)}**")
