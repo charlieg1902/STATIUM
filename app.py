@@ -683,7 +683,7 @@ def enrich_with_history(season_df, hist_df):
             s = _sim(q, key)
             if s > best_s:
                 best_s, best_k = s, key
-        return name_map[best_k] if best_s >= 0.65 else (None, None)
+        return name_map[best_k] if best_s >= 0.60 else (None, None)
 
     rows = []
     stat_rows = []
@@ -995,8 +995,8 @@ def build_ratings(df, decay_rate=None, intl_mode=False):
     if decay_rate is None:
         decay_rate = INTL_DECAY if intl_mode else DECAY_RATE
 
-    min_games = 2 if intl_mode else 4
-    min_rows  = 5 if intl_mode else 20
+    min_games = 2 if intl_mode else 3
+    min_rows  = 5 if intl_mode else 10
     required = {"home_id","away_id","home_goals","away_goals","date"}
     if df.empty or len(df) < min_rows or not required.issubset(df.columns):
         return {}, 1.35, 1.10
