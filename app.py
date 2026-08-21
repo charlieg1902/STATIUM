@@ -204,7 +204,7 @@ st.markdown(f"""
     box-shadow: 0 10px 26px rgba(0,168,107,0.16);
   }}
   .stat-card-num  {{ font-size: 1.8rem; font-weight: 800; color: {BRAND_DARK}; font-family: 'IBM Plex Mono', monospace; }}
-  .stat-card-label{{ font-size: 0.72rem; color: #64748b; margin-top: 2px; letter-spacing: .3px; }}
+  .stat-card-label{{ font-size: 0.72rem; color: #64748b; margin-top: 2px; letter-spacing: .3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
 
   /* ── Value Bet Cards ── */
   @keyframes slideInUp {{
@@ -2425,12 +2425,13 @@ def main():
     # ── Metrics bar ──────────────────────────────────────────
     _season_matches = len(season_df) if not season_df.empty else 0
     _hist_matches   = len(hist_mapped) if not hist_mapped.empty else 0
-    _data_label     = f"{_season_matches} jornadas" if _season_matches > 0 else f"{_hist_matches} históricos"
+    _data_num       = _season_matches if _season_matches > 0 else _hist_matches
+    _data_label     = "Jornadas temporada" if _season_matches > 0 else "Partidos históricos"
     mc = st.columns(5)
     for col, num, label in zip(mc, [
-        _data_label, len(ratings), len(upcoming),
+        _data_num, len(ratings), len(upcoming),
         len(odds_list), len(standings_df)
-    ], ["Datos del modelo","Equipos con rating","Próximos partidos",
+    ], [_data_label,"Equipos con rating","Próximos partidos",
         "Mercados con cuotas","Equipos en tabla"]):
         col.markdown(f"""
         <div class="stat-card">
