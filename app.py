@@ -2403,6 +2403,8 @@ def main():
             )
             st.stop()
     else:
+        _uniq_teams = len(set(season_df["home_id"].tolist() + season_df["away_id"].tolist())) if not season_df.empty else 0
+        st.info(f"🔬 DBG: season_df={len(season_df)} filas · hist_mapped={len(hist_mapped)} filas · equipos únicos={_uniq_teams} · min_games=3")
         ratings, avg_h, avg_a = build_ratings(
             season_df,
             decay_rate=INTL_DECAY if is_tournament else DECAY_RATE,
