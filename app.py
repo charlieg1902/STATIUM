@@ -2300,7 +2300,7 @@ def main():
             hist_mapped = pd.DataFrame()
         else:
             season_df    = fetch_season_matches(FD_KEY, lc["fd"])
-            hist_df      = fetch_historical_seasons(lc["fd"], n_seasons=2)
+            hist_df      = fetch_historical_seasons(lc["fd"], n_seasons=3)
             season_df, hist_mapped = enrich_with_history(season_df, hist_df)
         standings_df = fetch_standings(FD_KEY, lc["fd"])
 
