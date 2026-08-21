@@ -2302,6 +2302,46 @@ def main():
             hist_df      = fetch_historical_seasons(lc["fd"], n_seasons=2)
             season_df, hist_mapped = enrich_with_history(season_df, hist_df)
         standings_df = fetch_standings(FD_KEY, lc["fd"])
+
+    # ── Standings-based hist remap (early season fallback) ────
+    # When hist_mapped is sparse (fuzzy matching via season_df names misses teams
+    # that haven't played yet), re-map hist_df using standings which always has
+    # all 20 teams with their API IDs regardless of whether they've played yet.
+    if (not is_tournament and not standings_df.empty
+            and "team_id" in standings_df.columns
+            and len(hist_mapped) < 150
+            and not hist_df.empty):
+        _name_to_id = {str(r["team_name"]).lower().strip(): int(r["team_id"])
+                       for _, r in standings_df.iterrows()}
+        def _standings_remap(raw):
+            q = str(raw).lower().strip()
+            if q in _name_to_id:
+                return _name_to_id[q]
+            best_s, best_id = 0, None
+            for key, tid in _name_to_id.items():
+                s = _sim(q, key)
+                if s > best_s:
+                    best_s, best_id = s, tid
+            return best_id if best_s >= 0.52 else None
+        _extra = []
+        _extra_cols = ["home_corners","away_corners","home_shots","away_shots",
+                       "home_shots_ot","away_shots_ot"]
+        for _, row in hist_df.iterrows():
+            h_id = _standings_remap(row["home_name_raw"])
+            a_id = _standings_remap(row["away_name_raw"])
+            if h_id is None or a_id is None:
+                continue
+            _r = {"date":row["date"],"home_id":h_id,"away_id":a_id,
+                  "home_goals":int(row["home_goals"]),"away_goals":int(row["away_goals"])}
+            for col in _extra_cols:
+                _r[col] = row.get(col, np.nan)
+            _extra.append(_r)
+        if _extra:
+            _extra_df = pd.DataFrame(_extra)
+            season_df   = pd.concat([season_df, _extra_df], ignore_index=True)
+            season_df.drop_duplicates(subset=["date","home_id","away_id"], keep="first", inplace=True)
+            hist_mapped = pd.concat([hist_mapped, _extra_df], ignore_index=True)
+            hist_mapped.drop_duplicates(subset=["date","home_id","away_id"], keep="first", inplace=True)
         upcoming     = fetch_upcoming_matches(FD_KEY, lc["fd"], days_ahead)
         odds_list    = fetch_odds(ODDS_KEY, lc["odds"])
 
@@ -2403,8 +2443,6 @@ def main():
             )
             st.stop()
     else:
-        _uniq_teams = len(set(season_df["home_id"].tolist() + season_df["away_id"].tolist())) if not season_df.empty else 0
-        st.info(f"🔬 DBG: season_df={len(season_df)} filas · hist_mapped={len(hist_mapped)} filas · equipos únicos={_uniq_teams} · min_games=3")
         ratings, avg_h, avg_a = build_ratings(
             season_df,
             decay_rate=INTL_DECAY if is_tournament else DECAY_RATE,
