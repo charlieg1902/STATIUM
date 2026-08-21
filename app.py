@@ -2325,7 +2325,7 @@ def main():
                 s = _sim(q, key)
                 if s > best_s:
                     best_s, best_id = s, tid
-            return best_id if best_s >= 0.52 else None
+            return best_id if best_s >= 0.65 else None
         _extra = []
         _extra_cols = ["home_corners","away_corners","home_shots","away_shots",
                        "home_shots_ot","away_shots_ot"]
