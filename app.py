@@ -2293,6 +2293,7 @@ def main():
 
     # ── Carga ────────────────────────────────────────────────
     is_tournament = lc.get("is_tournament", False)
+    hist_df = pd.DataFrame()
     with st.spinner("Cargando datos..."):
         if is_tournament:
             season_df  = fetch_intl_matches(FD_KEY)
@@ -2342,8 +2343,9 @@ def main():
             season_df.drop_duplicates(subset=["date","home_id","away_id"], keep="first", inplace=True)
             hist_mapped = pd.concat([hist_mapped, _extra_df], ignore_index=True)
             hist_mapped.drop_duplicates(subset=["date","home_id","away_id"], keep="first", inplace=True)
-        upcoming     = fetch_upcoming_matches(FD_KEY, lc["fd"], days_ahead)
-        odds_list    = fetch_odds(ODDS_KEY, lc["odds"])
+
+    upcoming  = fetch_upcoming_matches(FD_KEY, lc["fd"], days_ahead)
+    odds_list = fetch_odds(ODDS_KEY, lc["odds"])
 
     # Para torneos: combinar fixtures de football-data.org con los derivados de cuotas.
     # No nos quedamos solo con la 1ª fuente que responda — algunas casas de apuestas
