@@ -2314,6 +2314,8 @@ def main():
             and not hist_df.empty):
         _name_to_id = {str(r["team_name"]).lower().strip(): int(r["team_id"])
                        for _, r in standings_df.iterrows()}
+        _id_to_name = {int(r["team_id"]): str(r["team_name"])
+                       for _, r in standings_df.iterrows()}
         def _standings_remap(raw):
             q = str(raw).lower().strip()
             if q in _name_to_id:
@@ -2333,6 +2335,8 @@ def main():
             if h_id is None or a_id is None:
                 continue
             _r = {"date":row["date"],"home_id":h_id,"away_id":a_id,
+                  "home_name":_id_to_name.get(h_id, str(h_id)),
+                  "away_name":_id_to_name.get(a_id, str(a_id)),
                   "home_goals":int(row["home_goals"]),"away_goals":int(row["away_goals"])}
             for col in _extra_cols:
                 _r[col] = row.get(col, np.nan)
