@@ -2744,16 +2744,67 @@ def main():
             if label.startswith("Tiros"):                                return "Tiros"
             return "1X2"
 
+        # ── Filtro de periodo ──────────────────────────────────
+        _today    = datetime.utcnow().strftime("%Y-%m-%d")
+        _tomorrow = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
+        _week_end = (datetime.utcnow() + timedelta(days=7)).strftime("%Y-%m-%d")
+
+        period_sel = st.radio(
+            "Periodo", ["🗓 Todo","📅 Hoy","🌅 Mañana","📆 Esta semana"],
+            horizontal=True, label_visibility="collapsed", key="vb_period"
+        )
+        if "Hoy" in period_sel:
+            _period_vbs = [v for v in all_vb_view if str(v.get("date",""))[:10] == _today]
+        elif "Mañana" in period_sel:
+            _period_vbs = [v for v in all_vb_view if str(v.get("date",""))[:10] == _tomorrow]
+        elif "semana" in period_sel:
+            _period_vbs = [v for v in all_vb_view if str(v.get("date",""))[:10] <= _week_end]
+        else:
+            _period_vbs = list(all_vb_view)
+
+        # ── Preset rápido de mercado ───────────────────────────
+        PRESETS = {
+            "🏆 Top EV":    None,
+            "⚽ 1X2":       ["1X2"],
+            "📈 Goles O/U": ["Over/Under Goles"],
+            "🏁 Córners":   ["Córners"],
+            "✅ BTTS":      ["BTTS"],
+        }
+        SORT_KEYS = {
+            "💹 Mayor EV":    "ev",
+            "💰 Mayor cuota": "bk_odds",
+            "📐 Mayor edge":  "edge",
+            "🎯 Mayor Kelly": "kelly",
+        }
+        preset_col, sort_col = st.columns([3, 1])
+        with preset_col:
+            preset_sel = st.radio(
+                "Vista rápida", list(PRESETS.keys()),
+                horizontal=True, label_visibility="collapsed", key="vb_preset"
+            )
+        with sort_col:
+            sort_sel = st.selectbox(
+                "Ordenar", list(SORT_KEYS.keys()),
+                label_visibility="collapsed", key="vb_sort"
+            )
+
+        st.markdown("<div style='margin:4px 0'></div>", unsafe_allow_html=True)
+
+        # ── Filtros detallados ─────────────────────────────────
         col_l, col_r = st.columns([1,1])
+        _preset_default = PRESETS[preset_sel] or ALL_MARKETS
         conf_filter   = col_l.multiselect("Confianza", ALL_CONF, default=ALL_CONF,
                                            help="Si lo dejas vacío se muestran todos los niveles de confianza.")
-        market_filter = col_r.multiselect("Mercado", ALL_MARKETS, default=ALL_MARKETS,
-                                           help="Si lo dejas vacío se muestran todos los mercados.")
+        market_filter = col_r.multiselect("Mercado", ALL_MARKETS, default=_preset_default,
+                                           help="Si lo dejas vacío se muestran todos los mercados.",
+                                           key="vb_market")
         st.markdown("---")
 
         conf_eff   = conf_filter if conf_filter else ALL_CONF
         market_eff = market_filter if market_filter else ALL_MARKETS
-        filtered = [v for v in all_vb_view if v["conf_label"] in conf_eff and market_category(v["label"]) in market_eff]
+        _sort_key  = SORT_KEYS[sort_sel]
+        _sorted    = sorted(_period_vbs, key=lambda x: x.get(_sort_key, 0), reverse=True)
+        filtered   = [v for v in _sorted if v["conf_label"] in conf_eff and market_category(v["label"]) in market_eff]
 
         if not filtered:
             st.info("No se detectaron value bets con estos criterios. Prueba bajando el EV mínimo.")
