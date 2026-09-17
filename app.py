@@ -2260,10 +2260,10 @@ def main():
         /* Tema de liga */
         .vb-card-high   {{border-left-color:{_th['accent']}!important;box-shadow:0 4px 20px {_th['light']}!important;}}
         .vb-card-medium {{border-left-color:{_th['accent']}!important;opacity:.92;}}
-        .vb-odds-hero   {{background:linear-gradient(135deg,{_th['accent']},{_th['accent']}cc)!important;}}
+        .vb-odds-hero   {{background:linear-gradient(135deg,{_th['accent']}dd,{BRAND_DARK})!important;}}
         section[data-testid="stMain"] > div:first-child {{background:{_th['bg']}!important;}}
         .vb-odds-num    {{color:white!important;}}
-        .vb-odds-lbl,.vb-ev-sub,.vb-bk-tag {{color:rgba(255,255,255,0.75)!important;}}
+        .vb-odds-lbl,.vb-ev-sub,.vb-bk-tag {{color:rgba(255,255,255,0.88)!important;}}
         </style>""", unsafe_allow_html=True)
         if _off_season and not lc.get("is_tournament"):
             _now = datetime.utcnow()
