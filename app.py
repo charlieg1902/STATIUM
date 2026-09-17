@@ -28,6 +28,59 @@ BRAND_STEEL   = "#3A404A"   # Steel Gray
 BRAND_BLUE    = "#1a6fa8"   # Data Blue (away / secondary)
 BRAND_AMBER   = "#d97706"   # Warning / low confidence
 
+# ── Icon System — inline SVG, 24x24 grid, stroke-based ───────
+# Naming: icon-[category]-[name]. Grid 24x24, stroke-width 2, currentColor.
+# Replaces emoji across the UI for a consistent, scalable visual language.
+_ICON_PATHS = {
+    "target":        '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/>',
+    "check-circle":  '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9" stroke-linecap="round" stroke-linejoin="round"/>',
+    "x-circle":      '<circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15" stroke-linecap="round"/><line x1="15" y1="9" x2="9" y2="15" stroke-linecap="round"/>',
+    "alert-triangle":'<path d="M12 4 L21 20 L3 20 Z" stroke-linejoin="round"/><line x1="12" y1="10" x2="12" y2="14.5" stroke-linecap="round"/><circle cx="12" cy="17.2" r="0.6" fill="currentColor" stroke="none"/>',
+    "calendar":      '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><line x1="3.5" y1="9.5" x2="20.5" y2="9.5"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/>',
+    "clock":         '<circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 15.5,14" stroke-linecap="round" stroke-linejoin="round"/>',
+    "trophy":        '<path d="M8 3h8v6a4 4 0 0 1-8 0V3Z"/><path d="M8 5H5.5a2 2 0 0 0 2 3.5H8"/><path d="M16 5h2.5a2 2 0 0 1-2 3.5H16"/><line x1="12" y1="13" x2="12" y2="17"/><line x1="8.5" y1="20.5" x2="15.5" y2="20.5"/><line x1="12" y1="17" x2="12" y2="20.5"/>',
+    "trending-up":   '<polyline points="3,17 9,11 13,15 21,6" stroke-linecap="round" stroke-linejoin="round"/><polyline points="15,6 21,6 21,12" stroke-linecap="round" stroke-linejoin="round"/>',
+    "trending-down": '<polyline points="3,7 9,13 13,9 21,18" stroke-linecap="round" stroke-linejoin="round"/><polyline points="15,18 21,18 21,12" stroke-linecap="round" stroke-linejoin="round"/>',
+    "circle-dot":    '<circle cx="12" cy="12" r="8" fill="currentColor" stroke="none" opacity="0.15"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/>',
+    "info":          '<circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><circle cx="12" cy="7.6" r="0.6" fill="currentColor" stroke="none"/>',
+    "chart-bar":     '<line x1="4" y1="20.5" x2="20" y2="20.5"/><rect x="6" y="12" width="3" height="8"/><rect x="10.5" y="7.5" width="3" height="12.5"/><rect x="15" y="4" width="3" height="16"/>',
+    "search":        '<circle cx="10.5" cy="10.5" r="6.5"/><line x1="20" y1="20" x2="15.3" y2="15.3" stroke-linecap="round"/>',
+    "coins":         '<ellipse cx="9" cy="8" rx="6" ry="3.5"/><path d="M3 8v4c0 1.9 2.7 3.5 6 3.5s6-1.6 6-3.5V8"/><path d="M15 10c2.8.3 4.5 1.7 4.5 3.2 0 1.9-2.4 3.3-5.5 3.3-1.5 0-2.9-.3-3.9-.9"/><path d="M3 12v4c0 1.9 2.7 3.5 6 3.5 1.6 0 3-.4 4-1"/>',
+    "scale":         '<line x1="12" y1="3" x2="12" y2="21"/><path d="M5 7l3 6.5a3 3 0 0 0 6 0" fill="none"/><path d="M4.3 7h5.4"/><path d="M14 7l3 6.5a3 3 0 0 0 6 0" fill="none"/><path d="M13.3 7h9.4"/>',
+    "lightbulb":     '<path d="M9.5 18.5h5"/><path d="M10.3 21h3.4"/><path d="M12 3a6.2 6.2 0 0 0-3.2 11.5c.4.3.7.8.7 1.3v.7h5v-.7c0-.5.3-1 .7-1.3A6.2 6.2 0 0 0 12 3Z"/>',
+    "flame":         '<path d="M12 2.5s-4.8 5-4.8 9.5a4.8 4.8 0 0 0 9.6 0c0-1.7-.8-2.7-.8-2.7s0 1.8-1.7 1.8c-1 0-1.2-1.2-1.2-2.1 0-2.4-1.1-6.5-1.1-6.5Z"/>',
+    "shield":        '<path d="M12 3.2 19.5 6v6c0 4.6-3.2 7.5-7.5 8.3-4.3-.8-7.5-3.7-7.5-8.3V6L12 3.2Z"/>',
+    "refresh":       '<path d="M20 12a8 8 0 1 1-2.6-5.9" stroke-linecap="round"/><polyline points="19.5,3.5 19.5,8.5 14.5,8.5" stroke-linecap="round" stroke-linejoin="round"/>',
+    "download":      '<path d="M12 3.5v11.5" stroke-linecap="round"/><polyline points="7.5,11 12,15.5 16.5,11" stroke-linecap="round" stroke-linejoin="round"/><line x1="4.5" y1="20" x2="19.5" y2="20" stroke-linecap="round"/>',
+    "arrow-right":   '<line x1="4" y1="12" x2="19" y2="12" stroke-linecap="round"/><polyline points="13.5,6 19,12 13.5,18" stroke-linecap="round" stroke-linejoin="round"/>',
+    "plus-circle":   '<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16" stroke-linecap="round"/><line x1="8" y1="12" x2="16" y2="12" stroke-linecap="round"/>',
+    "minus-circle":  '<circle cx="12" cy="12" r="9"/><line x1="8" y1="12" x2="16" y2="12" stroke-linecap="round"/>',
+    "settings":      '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M4.9 6.3l1.6 1.6M17.5 16.1l1.6 1.6M3 12h2.2M18.8 12H21M4.9 17.7l1.6-1.6M17.5 7.9l1.6-1.6" stroke-linecap="round"/>',
+    "sparkle":       '<path d="M12 3.5l1.8 5.7 5.7 1.8-5.7 1.8L12 18.5l-1.8-5.7-5.7-1.8 5.7-1.8Z" stroke-linejoin="round"/>',
+    "edit":          '<path d="M12 20h9" stroke-linecap="round"/><path d="M16.3 3.8a2 2 0 0 1 2.9 2.9L7.5 18.4l-4 1 1-4Z" stroke-linejoin="round"/>',
+    "download-file": '<path d="M6 3.5h8l4 4v13H6Z"/><path d="M14 3.5v4h4"/><line x1="12" y1="12" x2="12" y2="17" stroke-linecap="round"/><polyline points="9.5,14.5 12,17 14.5,14.5" stroke-linecap="round" stroke-linejoin="round"/>',
+    "handshake":     '<path d="M8.5 12.5l2.2 2.2c.5.5 1.3.5 1.8 0l.3-.3M13 14.5l1.3 1.3c.5.5 1.3.5 1.8 0s.5-1.3 0-1.8" stroke-linecap="round"/><path d="M2.5 11 7 6.5l2.8 1" stroke-linecap="round"/><path d="M21.5 11 17 6.5l-2.8 1" stroke-linecap="round"/><path d="M6.5 6l5.5 5.5 5.5-5.5" stroke-linecap="round"/>',
+    "sun":           '<circle cx="12" cy="12" r="4"/><line x1="12" y1="2.5" x2="12" y2="5.2" stroke-linecap="round"/><line x1="12" y1="18.8" x2="12" y2="21.5" stroke-linecap="round"/><line x1="2.5" y1="12" x2="5.2" y2="12" stroke-linecap="round"/><line x1="18.8" y1="12" x2="21.5" y2="12" stroke-linecap="round"/>',
+    "moon":          '<path d="M20 14.7A8.6 8.6 0 1 1 9.3 4a7 7 0 0 0 10.7 10.7Z" stroke-linejoin="round"/>',
+    "ruler":         '<rect x="3" y="9.5" width="18" height="6" rx="1"/><line x1="7.2" y1="9.5" x2="7.2" y2="12.5"/><line x1="11.4" y1="9.5" x2="11.4" y2="12.5"/><line x1="15.6" y1="9.5" x2="15.6" y2="12.5"/>',
+    "flask":         '<path d="M9.5 3h5" stroke-linecap="round"/><path d="M10.2 3v6.5L5 18a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5.2-8.5V3" stroke-linejoin="round"/><line x1="7.5" y1="15" x2="16.5" y2="15"/>',
+    "flag-check":    '<path d="M5 3v18" stroke-linecap="round"/><path d="M5 4h13l-2.5 4L18 12H5Z" stroke-linejoin="round"/>',
+    "radar":         '<circle cx="12" cy="12" r="9"/><path d="M12 12 17 8" stroke-linecap="round"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>',
+    "link":          '<path d="M9.5 14.5 14.5 9.5" stroke-linecap="round"/><path d="M11 6.5l1.4-1.4a4 4 0 0 1 5.6 5.6L16.6 12" stroke-linecap="round"/><path d="M13 17.5l-1.4 1.4a4 4 0 0 1-5.6-5.6L7.4 12" stroke-linecap="round"/>',
+    "boot":          '<path d="M9.5 3v6.5L5.5 13v3.5A1.5 1.5 0 0 0 7 18h11a1.5 1.5 0 0 0 1.4-2.1l-2.6-6.2A3 3 0 0 0 14 8h-1.5V3Z" stroke-linejoin="round"/>',
+    "star":          '<path d="M12 3.5l2.6 5.5 6 .8-4.3 4.2 1 6-5.3-2.9-5.3 2.9 1-6L3.4 9.8l6-.8Z" stroke-linejoin="round"/>',
+    "globe":         '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/>',
+    "home":          '<path d="M4 11.5 12 4l8 7.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10v9.5h12V10" stroke-linejoin="round"/>',
+    "plane":         '<path d="M3.5 15.5 10 13l-1-6.5 2-1 3 6 5-2v2l-5 3.5.5 4-2 1-1.5-3-3.5 1.5Z" stroke-linejoin="round"/>',
+}
+
+def icon(name, size=16, color="currentColor", stroke_width=2, cls=""):
+    """Inline SVG icon, 24x24 viewBox, stroke-based. Falls back to a dot if name is unknown."""
+    body = _ICON_PATHS.get(name, '<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>')
+    return (f'<svg class="{cls}" width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" '
+            f'stroke="{color}" stroke-width="{stroke_width}" xmlns="http://www.w3.org/2000/svg" '
+            f'style="vertical-align:-2px;display:inline-block">{body}</svg>')
+
 # Logo SVG — STATIUM icon: stadium ring + brand triangle
 LOGO_SVG = """
 <svg width="52" height="52" viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
@@ -426,7 +479,7 @@ def _sidebar_banner_html():
     if now.month == 6 or (now.month == 7 and now.day <= 19):
         # Mundial activo (aprox. 15 jun – 19 jul 2026)
         return (
-            '<span style="font-size:1.1rem">🌍</span>'
+            f'<span style="font-size:1.1rem">{icon("globe",18,BRAND_GREEN)}</span>'
             '<div><div style="font-size:.68rem;font-weight:700;color:#00A86B;letter-spacing:.4px;'
             'font-family:\'IBM Plex Mono\',monospace">EN VIVO · FOCO MUNDIAL 2026</div>'
             '<div style="font-size:.65rem;color:#64748b;margin-top:1px">Las grandes ligas están en receso de temporada</div>'
@@ -435,7 +488,7 @@ def _sidebar_banner_html():
     elif now.month == 7:
         # Post-Mundial, pre-temporada
         return (
-            '<span style="font-size:1.1rem">🏋️</span>'
+            f'<span style="font-size:1.1rem">{icon("clock",18,"#f59e0b")}</span>'
             '<div><div style="font-size:.68rem;font-weight:700;color:#f59e0b;letter-spacing:.4px;'
             f'font-family:\'IBM Plex Mono\',monospace">PRETEMPORADA · {_season_label()}</div>'
             '<div style="font-size:.65rem;color:#64748b;margin-top:1px">Las ligas arrancan en agosto</div>'
@@ -883,10 +936,10 @@ def is_title_decided(standings_df, remaining):
 
 def get_team_context(team_id, standings_df, league_cfg, matchday, title_decided=False):
     if standings_df.empty:
-        return {"label":"Sin datos","emoji":"❓","css":"ctx-mid","alert":False,"dead":False}
+        return {"label":"Sin datos","emoji":"❓","icon":("info",BRAND_STEEL),"css":"ctx-mid","alert":False,"dead":False}
     row = standings_df[standings_df["team_id"]==team_id]
     if row.empty:
-        return {"label":"Sin datos","emoji":"❓","css":"ctx-mid","alert":False,"dead":False}
+        return {"label":"Sin datos","emoji":"❓","icon":("info",BRAND_STEEL),"css":"ctx-mid","alert":False,"dead":False}
     row = row.iloc[0]
     pos = int(row["position"])
 
@@ -897,14 +950,14 @@ def get_team_context(team_id, standings_df, league_cfg, matchday, title_decided=
         group  = row.get("group", "")
         group_label = f"Grupo {group.split('_')[-1]}" if group else "Grupo"
         if pos == 1:
-            return {"label":f"Líder {group_label}","emoji":"🥇","css":"ctx-champ-won","alert":True,"dead":False}
+            return {"label":f"Líder {group_label}","emoji":"🥇","icon":("trophy","#c9970f"),"css":"ctx-champ-won","alert":True,"dead":False}
         elif pos == 2:
-            return {"label":f"Clasifica {group_label}","emoji":"✅","css":"ctx-champion","alert":True,"dead":False}
+            return {"label":f"Clasifica {group_label}","emoji":"✅","icon":("check-circle",BRAND_GREEN),"css":"ctx-champion","alert":True,"dead":False}
         elif pos == 3:
             # Tercer puesto — puede clasificar como mejor 3º
-            return {"label":"Mejor 3º (borde)","emoji":"⚠️","css":"ctx-nearrel","alert":True,"dead":False}
+            return {"label":"Mejor 3º (borde)","emoji":"⚠️","icon":("alert-triangle",BRAND_AMBER),"css":"ctx-nearrel","alert":True,"dead":False}
         else:
-            return {"label":"En eliminación","emoji":"🔴","css":"ctx-relegation","alert":True,"dead":False}
+            return {"label":"En eliminación","emoji":"🔴","icon":("x-circle","#dc2626"),"css":"ctx-relegation","alert":True,"dead":False}
 
     pos       = int(row["position"])
     pts       = int(row["points"])
@@ -926,22 +979,22 @@ def get_team_context(team_id, standings_df, league_cfg, matchday, title_decided=
     pts_cl    = pts_at(cl_spots)
 
     if pos==1 and title_decided:
-        return {"label":"Campeón 🏆","emoji":"🥇","css":"ctx-champ-won","alert":False,"dead":False}
+        return {"label":"Campeón","emoji":"🥇","icon":("trophy","#c9970f"),"css":"ctx-champ-won","alert":False,"dead":False}
     if pos<=2 and not title_decided:
-        return {"label":"Pelea título","emoji":"🏆","css":"ctx-title","alert":True,"dead":False}
+        return {"label":"Pelea título","emoji":"🏆","icon":("trophy",BRAND_GREEN),"css":"ctx-title","alert":True,"dead":False}
     if pos<=cl_spots:
-        return {"label":"Zona Champions","emoji":"⭐","css":"ctx-champion","alert":True,"dead":False}
+        return {"label":"Zona Champions","emoji":"⭐","icon":("star",BRAND_GREEN),"css":"ctx-champion","alert":True,"dead":False}
     if pos==cl_spots+1 and pts>=pts_cl-remaining*3:
-        return {"label":"Persigue Champions","emoji":"⭐","css":"ctx-champion","alert":True,"dead":False}
+        return {"label":"Persigue Champions","emoji":"⭐","icon":("star",BRAND_GREEN),"css":"ctx-champion","alert":True,"dead":False}
     if pos<=euro_spots:
-        return {"label":"Zona Europa","emoji":"🌍","css":"ctx-europa","alert":True,"dead":False}
+        return {"label":"Zona Europa","emoji":"🌍","icon":("globe",BRAND_BLUE),"css":"ctx-europa","alert":True,"dead":False}
     if pos>safe_pos:
-        return {"label":"Zona descenso","emoji":"🔴","css":"ctx-relegation","alert":True,"dead":False}
+        return {"label":"Zona descenso","emoji":"🔴","icon":("x-circle","#dc2626"),"css":"ctx-relegation","alert":True,"dead":False}
     if pts-pts_rel<=3:
-        return {"label":"Pelea descenso","emoji":"🟠","css":"ctx-nearrel","alert":True,"dead":False}
+        return {"label":"Pelea descenso","emoji":"🟠","icon":("circle-dot",BRAND_AMBER),"css":"ctx-nearrel","alert":True,"dead":False}
     if late and pts>pts_rel+remaining*3 and pos>euro_spots:
-        return {"label":"Sin motivación","emoji":"😴","css":"ctx-dead","alert":True,"dead":True}
-    return {"label":"Zona media","emoji":"➖","css":"ctx-mid","alert":False,"dead":False}
+        return {"label":"Sin motivación","emoji":"😴","icon":("moon",BRAND_STEEL),"css":"ctx-dead","alert":True,"dead":True}
+    return {"label":"Zona media","emoji":"➖","icon":("minus-circle",BRAND_STEEL),"css":"ctx-mid","alert":False,"dead":False}
 
 def match_alerts(home_ctx, away_ctx, matchday, league_cfg, home_name="Local", away_name="Visitante"):
     alerts = []
@@ -1333,6 +1386,28 @@ def conf_info(edge):
     elif edge>=0.07: return "Media", "medium","🟡","ev-medium","conf-medium"
     else:            return "Baja",  "low",   "🟠","ev-low","conf-low"
 
+# SVG equivalents of conf_icon, for HTML-rendered contexts (cards). Native
+# Streamlit widgets (st.expander, st.success) keep the emoji — they can't
+# render inline SVG, only unicode text.
+CONF_ICON_SVG = {
+    "high":   icon("circle-dot", 13, BRAND_GREEN),
+    "medium": icon("circle-dot", 13, BRAND_STEEL),
+    "low":    icon("circle-dot", 13, BRAND_AMBER),
+}
+
+_ALERT_EMOJI_ICON = {
+    "🔴": ("x-circle", "#dc2626"),
+    "⚠️": ("alert-triangle", BRAND_AMBER),
+    "⚡": ("sparkle", BRAND_STEEL),
+    "😴": ("moon", BRAND_STEEL),
+}
+def _alert_html_icon(text):
+    """Swap a leading alert emoji for its SVG icon; used only in HTML-rendered card contexts."""
+    for emo, (iname, color) in _ALERT_EMOJI_ICON.items():
+        if text.startswith(emo):
+            return icon(iname, 13, color) + " " + text[len(emo):].lstrip()
+    return text
+
 def detect_value_bets(probs, bk, home_name, away_name, ev_threshold, corner_probs=None, bk_names=None):
     if not probs: return []
     bk_names = bk_names or {}
@@ -1513,12 +1588,12 @@ def streak_html(streak_count, streak_type):
             '</div>'
         )
     is_hit  = streak_type == "hit"
-    icon    = "🔥" if is_hit else "🧊"
+    _glyph  = icon("flame", 18, BRAND_GREEN if is_hit else "#ef4444")
     label   = "HITS CONSECUTIVOS" if is_hit else "MISSES CONSECUTIVOS"
     color   = BRAND_GREEN if is_hit else "#ef4444"
     bg      = "rgba(0,168,107,0.07)" if is_hit else "rgba(239,68,68,0.07)"
     border  = "rgba(0,168,107,0.25)" if is_hit else "rgba(239,68,68,0.25)"
-    icons   = "".join(f'<span style="font-size:1.3rem;opacity:{max(0.25,1-i*0.14)}">{icon}</span>' for i in range(min(streak_count, 6)))
+    icons   = "".join(f'<span style="opacity:{max(0.25,1-i*0.14)}">{_glyph}</span>' for i in range(min(streak_count, 6)))
     return (
         f'<div style="background:{bg};border:1px solid {border};border-radius:12px;padding:18px;text-align:center">'
         f'<div style="font-size:.63rem;letter-spacing:1.2px;color:{color};font-family:\'IBM Plex Mono\',monospace;margin-bottom:6px">{label}</div>'
@@ -1968,7 +2043,9 @@ def render_form_mini(form_list, n=3):
     return html
 
 def ctx_badge_html(ctx):
-    return f'<span class="ctx-badge {ctx["css"]}">{ctx["emoji"]} {ctx["label"]}</span>'
+    _ic = ctx.get("icon")
+    _glyph = icon(_ic[0], 13, _ic[1]) if _ic else ctx.get("emoji", "")
+    return f'<span class="ctx-badge {ctx["css"]}">{_glyph} {ctx["label"]}</span>'
 
 def prob_bar_html(p, home_name, away_name):
     h=p["home_win"]*100; d=p["draw"]*100; a=p["away_win"]*100
@@ -1997,19 +2074,19 @@ def _corner_shot_detail_html(vb):
     sotp = vb.get("sot_probs")
     if cp:
         parts.append(
-            f'<div class="vb-detail-item"><span class="vb-detail-label">🚩 Córners pred.</span>'
+            f'<div class="vb-detail-item"><span class="vb-detail-label">{icon("flag-check",12,BRAND_STEEL)} Córners pred.</span>'
             f'<span class="vb-detail-val blue">{cp["lam_total"]} '
             f'<span style="font-size:.68rem;color:#94a3b8">({cp["lam_h"]} / {cp["lam_a"]})</span></span></div>'
         )
     if sp:
         parts.append(
-            f'<div class="vb-detail-item"><span class="vb-detail-label">👟 Tiros pred.</span>'
+            f'<div class="vb-detail-item"><span class="vb-detail-label">{icon("boot",12,BRAND_STEEL)} Tiros pred.</span>'
             f'<span class="vb-detail-val blue">{sp["lam_total"]} '
             f'<span style="font-size:.68rem;color:#94a3b8">({sp["lam_h"]} / {sp["lam_a"]})</span></span></div>'
         )
     if sotp:
         parts.append(
-            f'<div class="vb-detail-item"><span class="vb-detail-label">🎯 Al arco pred.</span>'
+            f'<div class="vb-detail-item"><span class="vb-detail-label">{icon("target",12,BRAND_STEEL)} Al arco pred.</span>'
             f'<span class="vb-detail-val blue">{sotp["lam_total"]} '
             f'<span style="font-size:.68rem;color:#94a3b8">({sotp["lam_h"]} / {sotp["lam_a"]})</span></span></div>'
         )
@@ -2042,7 +2119,7 @@ def _vb_card_html_inner(vb, idx=0):
 
     alert_html=""
     for a in vb.get("ctx_alerts",[]):
-        alert_html+=f'<div class="ctx-alert">{a}</div>'
+        alert_html+=f'<div class="ctx-alert">{_alert_html_icon(a)}</div>'
 
     # Compact 1X2 probability bar — single line to avoid Streamlit markdown code-block interpretation
     prob_html = ""
@@ -2090,7 +2167,7 @@ def _vb_card_html_inner(vb, idx=0):
 
     d_row = (
         f'<div class="vb-details">'
-        f'<div class="vb-detail-item"><span class="vb-detail-label">Cuota disponible</span><span class="vb-detail-val green">📌 {vb["bk_odds"]}</span></div>'
+        f'<div class="vb-detail-item"><span class="vb-detail-label">Cuota disponible</span><span class="vb-detail-val green">{icon("check-circle",12,BRAND_GREEN)} {vb["bk_odds"]}</span></div>'
         f'<div class="vb-detail-item"><span class="vb-detail-label">Cuota justa</span><span class="vb-detail-val">{fair}</span></div>'
         f'<div class="vb-detail-item"><span class="vb-detail-label">P. modelo</span><span class="vb-detail-val">{vb["model_p"]*100:.1f}%</span></div>'
         f'<div class="vb-detail-item"><span class="vb-detail-label">P. implícita</span><span class="vb-detail-val">{vb["implied"]*100:.1f}%</span></div>'
@@ -2098,7 +2175,7 @@ def _vb_card_html_inner(vb, idx=0):
         f'<div class="vb-detail-item"><span class="vb-detail-label">xG Local</span><span class="vb-detail-val blue">{xg_h}</span></div>'
         f'<div class="vb-detail-item"><span class="vb-detail-label">xG Visit.</span><span class="vb-detail-val blue">{xg_a}</span></div>'
         f'<div class="vb-detail-item"><span class="vb-detail-label">Kelly 25%</span>'
-        f'<span class="vb-detail-val green">🎯 {vb.get("kelly", 0):.1f}% · {round(vb.get("kelly", 0) / 100 * st.session_state.get("bankroll", 100), 1)}u</span></div>'
+        f'<span class="vb-detail-val green">{icon("target",12,BRAND_GREEN)} {vb.get("kelly", 0):.1f}% · {round(vb.get("kelly", 0) / 100 * st.session_state.get("bankroll", 100), 1)}u</span></div>'
         + _corner_shot_detail_html(vb) +
         f'</div>'
     )
@@ -2110,11 +2187,11 @@ def _vb_card_html_inner(vb, idx=0):
     html = (
         f'<div class="vb-card vb-card-{vb["conf_key"]}" style="animation-delay:{delay:.2f}s">'
         f'<p class="vb-match" style="margin:0 0 2px">{vb["home"]} <span style="color:#94a3b8;font-weight:400">vs</span> {vb["away"]}</p>'
-        f'<p class="vb-meta" style="margin:0 0 10px">📅 {date_str} &nbsp;·&nbsp; Jornada {vb.get("matchday","?")}</p>'
+        f'<p class="vb-meta" style="margin:0 0 10px">{icon("calendar",12)} {date_str} &nbsp;·&nbsp; Jornada {vb.get("matchday","?")}</p>'
         f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px">'
         f'  <div>'
         f'    <div style="font-size:1.15rem;font-weight:700;color:#0f172a;font-family:\'Space Grotesk\',sans-serif;line-height:1.2">{vb["label"]}</div>'
-        f'    <div style="margin-top:8px"><span class="conf-tag {vb["conf_css"]}">{vb["conf_icon"]} Confianza {vb["conf_label"]}</span></div>'
+        f'    <div style="margin-top:8px"><span class="conf-tag {vb["conf_css"]}">{CONF_ICON_SVG.get(vb["conf_key"],"")} Confianza {vb["conf_label"]}</span></div>'
         f'    <div style="margin-top:8px" class="vb-ctx-row">{hbadge} <span style="color:#cbd5e1;font-size:.75rem;align-self:center">vs</span> {abadge}</div>'
         f'  </div>'
         f'  <div class="vb-odds-hero">'
@@ -2268,13 +2345,13 @@ def main():
         if _off_season and not lc.get("is_tournament"):
             _now = datetime.utcnow()
             _wc_active = _now.month == 6 or (_now.month == 7 and _now.day <= 19)
-            _wc_note = (" Te recomendamos enfocarte en <b>🌍 Mundial 2026</b> para esta semana."
+            _wc_note = (f" Te recomendamos enfocarte en <b>{icon('globe',13,'#92400e')} Mundial 2026</b> para esta semana."
                         if _wc_active else f" La temporada <b>{_season_label()}</b> arranca en agosto.")
             st.markdown(
                 '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;'
                 'padding:8px 12px;margin-top:-2px;margin-bottom:10px;font-size:.74rem;color:#92400e;'
                 'font-family:\'Space Grotesk\',sans-serif">'
-                f'😴 Esta liga está en receso — los datos corresponden a la última campaña finalizada.{_wc_note}'
+                f'{icon("moon",13,"#92400e")} Esta liga está en receso — los datos corresponden a la última campaña finalizada.{_wc_note}'
                 '</div>',
                 unsafe_allow_html=True
             )
@@ -2469,21 +2546,24 @@ def main():
         foul_ratings,   avg_fh, avg_fa  = build_stat_ratings(hist_mapped, "home_fouls",   "away_fouls")
 
     # ── Metrics bar ──────────────────────────────────────────
+    # Collapsed by default: this is supporting context, not the primary
+    # content — picks should be the entry point, not "20 equipos en tabla".
     _season_matches = len(season_df) if not season_df.empty else 0
     _hist_matches   = len(hist_mapped) if not hist_mapped.empty else 0
     _data_num       = _season_matches if _season_matches > 0 else _hist_matches
     _data_label     = "Jornadas temporada" if _season_matches > 0 else "Partidos históricos"
-    mc = st.columns(5)
-    for col, num, label in zip(mc, [
-        _data_num, len(ratings), len(upcoming),
-        len(odds_list), len(standings_df)
-    ], [_data_label,"Equipos con rating","Próximos partidos",
-        "Mercados con cuotas","Equipos en tabla"]):
-        col.markdown(f"""
-        <div class="stat-card">
-          <div class="stat-card-num">{num}</div>
-          <div class="stat-card-label">{label}</div>
-        </div>""", unsafe_allow_html=True)
+    with st.expander("📊 Datos del modelo", expanded=False):
+        mc = st.columns(5)
+        for col, num, label in zip(mc, [
+            _data_num, len(ratings), len(upcoming),
+            len(odds_list), len(standings_df)
+        ], [_data_label,"Equipos con rating","Próximos partidos",
+            "Mercados con cuotas","Equipos en tabla"]):
+            col.markdown(f"""
+            <div class="stat-card">
+              <div class="stat-card-num">{num}</div>
+              <div class="stat-card-label">{label}</div>
+            </div>""", unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
 
@@ -2634,7 +2714,7 @@ def main():
             st.markdown(
                 '<div style="font-size:.72rem;font-weight:700;color:#64748b;'
                 'letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;'
-                'font-family:Space Grotesk,sans-serif">📅 Calendario</div>',
+                f'font-family:Space Grotesk,sans-serif">{icon("calendar",13,"#64748b")} Calendario</div>',
                 unsafe_allow_html=True
             )
 
@@ -2713,7 +2793,7 @@ def main():
                     st.markdown(
                         f'<div style="text-align:center;font-size:.70rem;color:#00A86B;'
                         f'font-weight:600;margin-top:2px;font-family:\'IBM Plex Mono\',monospace">'
-                        f'📅 Filtrando: {datetime.strptime(sel_d,"%Y-%m-%d").strftime("%a %d/%m")}</div>',
+                        f'{icon("calendar",13,BRAND_GREEN)} Filtrando: {datetime.strptime(sel_d,"%Y-%m-%d").strftime("%a %d/%m")}</div>',
                         unsafe_allow_html=True
                     )
 
@@ -2762,7 +2842,9 @@ def main():
         else:
             _period_vbs = list(all_vb_view)
 
-        # ── Preset rápido de mercado ───────────────────────────
+        # ── Preset rápido + ordenar + filtros detallados ───────
+        # Collapsed by default — the period filter above covers the most
+        # common quick action; these are refinements, not the entry point.
         PRESETS = {
             "🏆 Top EV":    None,
             "⚽ 1X2":       ["1X2"],
@@ -2776,29 +2858,29 @@ def main():
             "📐 Mayor edge":  "edge",
             "🎯 Mayor Kelly": "kelly",
         }
-        preset_col, sort_col = st.columns([3, 1])
-        with preset_col:
-            preset_sel = st.radio(
-                "Vista rápida", list(PRESETS.keys()),
-                horizontal=True, label_visibility="collapsed", key="vb_preset"
-            )
-        with sort_col:
-            sort_sel = st.selectbox(
-                "Ordenar", list(SORT_KEYS.keys()),
-                label_visibility="collapsed", key="vb_sort"
-            )
+        with st.expander("⚙️ Filtros avanzados (vista rápida, orden, confianza, mercado)", expanded=False):
+            preset_col, sort_col = st.columns([3, 1])
+            with preset_col:
+                preset_sel = st.radio(
+                    "Vista rápida", list(PRESETS.keys()),
+                    horizontal=True, label_visibility="collapsed", key="vb_preset"
+                )
+            with sort_col:
+                sort_sel = st.selectbox(
+                    "Ordenar", list(SORT_KEYS.keys()),
+                    label_visibility="collapsed", key="vb_sort"
+                )
 
-        st.markdown("<div style='margin:4px 0'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='margin:4px 0'></div>", unsafe_allow_html=True)
 
-        # ── Filtros detallados ─────────────────────────────────
-        col_l, col_r = st.columns([1,1])
-        _preset_default = PRESETS[preset_sel] or ALL_MARKETS
-        conf_filter   = col_l.multiselect("Confianza", ALL_CONF, default=ALL_CONF,
-                                           help="Si lo dejas vacío se muestran todos los niveles de confianza.")
-        market_filter = col_r.multiselect("Mercado", ALL_MARKETS, default=_preset_default,
-                                           help="Si lo dejas vacío se muestran todos los mercados.",
-                                           key="vb_market")
-        st.markdown("---")
+            col_l, col_r = st.columns([1,1])
+            _preset_default = PRESETS[preset_sel] or ALL_MARKETS
+            conf_filter   = col_l.multiselect("Confianza", ALL_CONF, default=ALL_CONF,
+                                               help="Si lo dejas vacío se muestran todos los niveles de confianza.")
+            market_filter = col_r.multiselect("Mercado", ALL_MARKETS, default=_preset_default,
+                                               help="Si lo dejas vacío se muestran todos los mercados.",
+                                               key="vb_market")
+        st.markdown("<div style='margin:6px 0'></div>", unsafe_allow_html=True)
 
         conf_eff   = conf_filter if conf_filter else ALL_CONF
         market_eff = market_filter if market_filter else ALL_MARKETS
@@ -2835,7 +2917,7 @@ def main():
                     f'<div style="font-size:1.05rem;font-weight:700;color:{BRAND_DARK};'
                     f'font-family:\'Space Grotesk\',sans-serif">⚽ {g_home} <span style="color:#94a3b8;font-weight:400">vs</span> {g_away}</div>'
                     f'<div style="font-size:.74rem;color:#94a3b8;font-family:\'IBM Plex Mono\',monospace">'
-                    f'📅 {g_dt_str} &nbsp;·&nbsp; {len(vbs)} pick(s) detectado(s)</div>'
+                    f'{icon("calendar",12,"#94a3b8")} {g_dt_str} &nbsp;·&nbsp; {len(vbs)} pick(s) detectado(s)</div>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
@@ -2867,15 +2949,15 @@ def main():
                             f'<div style="display:flex;align-items:center;gap:5px"><span style="font-size:.68rem;color:#94a3b8">Local</span>{_fh}</div>'
                             f'<div style="display:flex;align-items:center;gap:5px"><span style="font-size:.68rem;color:#94a3b8">Visit.</span>{_fa}</div></div>'
                         ) if (_form_h or _form_a) else ""
-                        _alert_html = "".join(f'<div class="ctx-alert">{a}</div>' for a in vb.get("ctx_alerts",[]))
+                        _alert_html = "".join(f'<div class="ctx-alert">{_alert_html_icon(a)}</div>' for a in vb.get("ctx_alerts",[]))
                         _card_html = (
                             f'<div class="vb-card vb-card-{_ck}" style="animation-delay:{_delay:.2f}s">'
                             f'<p class="vb-match" style="margin:0 0 2px">{_h} <span style="color:#94a3b8;font-weight:400">vs</span> {_a}</p>'
-                            f'<p class="vb-meta" style="margin:0 0 10px">📅 {_date} &nbsp;·&nbsp; Jornada {_md}</p>'
+                            f'<p class="vb-meta" style="margin:0 0 10px">{icon("calendar",12)} {_date} &nbsp;·&nbsp; Jornada {_md}</p>'
                             f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px">'
                             f'  <div>'
                             f'    <div style="font-size:1.15rem;font-weight:700;color:#0f172a;font-family:\'Space Grotesk\',sans-serif;line-height:1.2">{_lbl}</div>'
-                            f'    <div style="margin-top:8px"><span class="conf-tag {_conf_css}">{_conf_icon} Confianza {_conf_label}</span></div>'
+                            f'    <div style="margin-top:8px"><span class="conf-tag {_conf_css}">{CONF_ICON_SVG.get(_ck,"")} Confianza {_conf_label}</span></div>'
                             f'    <div style="margin-top:8px" class="vb-ctx-row">{_hbadge} <span style="color:#cbd5e1;font-size:.75rem;align-self:center">vs</span> {_abadge}</div>'
                             f'  </div>'
                             f'  <div class="vb-odds-hero">'
@@ -2892,7 +2974,7 @@ def main():
                     st.markdown(
                         '<div style="font-size:.66rem;font-weight:700;color:#94a3b8;letter-spacing:.8px;'
                         'text-transform:uppercase;margin:4px 0 8px;'
-                        'font-family:\'IBM Plex Mono\',monospace">📊 ¿Por qué estos picks?</div>',
+                        f'font-family:\'IBM Plex Mono\',monospace">{icon("chart-bar",13,"#94a3b8")} ¿Por qué estos picks?</div>',
                         unsafe_allow_html=True
                     )
                     for idx, vb in enumerate(vbs):
@@ -2942,9 +3024,9 @@ def main():
                     continue
                 fh=team_form(_form_src,m["home_id"]); fa=team_form(_form_src,m["away_id"])
                 c1,c2,c3=st.columns([5,1,5])
-                c1.markdown(f"**🏠 {m['home_name']}**<br>{render_form(fh)}", unsafe_allow_html=True)
+                c1.markdown(f"**{icon('home',13,BRAND_DARK)} {m['home_name']}**<br>{render_form(fh)}", unsafe_allow_html=True)
                 c2.markdown("**VS**")
-                c3.markdown(f"**✈️ {m['away_name']}**<br>{render_form(fa)}", unsafe_allow_html=True)
+                c3.markdown(f"**{icon('plane',13,BRAND_BLUE)} {m['away_name']}**<br>{render_form(fa)}", unsafe_allow_html=True)
                 st.markdown(prob_bar_html(p,m["home_name"],m["away_name"]),unsafe_allow_html=True)
                 if bk["h2h_1"]>0:
                     st.divider()
