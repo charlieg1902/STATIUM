@@ -28,6 +28,14 @@ BRAND_STEEL   = "#3A404A"   # Steel Gray
 BRAND_BLUE    = "#1a6fa8"   # Data Blue (away / secondary)
 BRAND_AMBER   = "#d97706"   # Warning / low confidence
 
+# Tonal scale for Signal Green — semantic roles instead of ad-hoc rgba()
+# opacity hacks scattered through the CSS. 50 = faintest tint, 900 = deepest.
+GREEN_50  = "#eefaf5"
+GREEN_100 = "#d7f2e6"
+GREEN_600 = "#00A86B"   # = BRAND_GREEN, kept for continuity
+GREEN_700 = "#008a58"
+GREEN_900 = "#004d31"
+
 # ── Icon System — inline SVG, 24x24 grid, stroke-based ───────
 # Naming: icon-[category]-[name]. Grid 24x24, stroke-width 2, currentColor.
 # Replaces emoji across the UI for a consistent, scalable visual language.
@@ -107,6 +115,14 @@ st.markdown(f"""
   .block-container {{ padding-top: 1.2rem; max-width: 1200px; }}
   html, body, [class*="css"] {{ font-family: 'Space Grotesk', sans-serif !important; }}
   * {{ scroll-behavior: smooth; }}
+
+  /* ── Signature texture: radar-grid, echoes the logo's rings ── */
+  [data-testid="stAppViewContainer"] > .main {{
+    background-image:
+      radial-gradient(rgba(0,168,107,0.10) 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-position: -1px -1px;
+  }}
 
   /* ── Global lively transitions ── */
   @keyframes fadeIn {{
@@ -243,18 +259,17 @@ st.markdown(f"""
     margin: 10px 0 18px 0;
   }}
 
-  /* ── Stat cards (top metrics) ── */
+  /* ── Stat cards (top metrics) — terminal readout, not admin-template ── */
   .stat-card {{
-    background: white; border-radius: 14px; padding: 16px 20px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-    border-top: 3px solid {BRAND_GREEN};
+    background: white; border-radius: 6px; padding: 14px 18px;
+    border: 1px solid #e2e8f0; border-top: 2px solid {BRAND_GREEN};
     text-align: center;
-    transition: transform 0.2s cubic-bezier(.2,.8,.2,1), box-shadow 0.2s ease;
-    animation: fadeIn 0.45s ease-out both;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    animation: fadeIn 0.35s ease-out both;
   }}
   .stat-card:hover {{
-    transform: translateY(-3px);
-    box-shadow: 0 10px 26px rgba(0,168,107,0.16);
+    border-color: rgba(0,168,107,0.45);
+    box-shadow: 0 0 0 1px rgba(0,168,107,0.12);
   }}
   .stat-card-num  {{ font-size: 1.8rem; font-weight: 800; color: {BRAND_DARK}; font-family: 'IBM Plex Mono', monospace; }}
   .stat-card-label{{ font-size: 0.72rem; color: #64748b; margin-top: 2px; letter-spacing: .3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
@@ -266,17 +281,19 @@ st.markdown(f"""
   }}
 
   .vb-card {{
-    background: white; border-radius: 16px; padding: 20px 22px;
-    margin-bottom: 14px; position: relative; overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    background: white; border-radius: 6px; padding: 18px 20px;
+    margin-bottom: 12px; position: relative; overflow: hidden;
     border: 1px solid #e2e8f0;
-    transition: transform 0.15s, box-shadow 0.15s;
-    animation: slideInUp 0.45s ease-out both;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    animation: slideInUp 0.32s cubic-bezier(.2,.8,.2,1) both;
   }}
-  .vb-card:hover {{ transform: translateY(-2px); box-shadow: 0 10px 32px rgba(0,0,0,0.10); }}
-  .vb-card-high   {{ border-left: 4px solid {BRAND_GREEN}; box-shadow: 0 4px 20px rgba(0,168,107,0.10); }}
-  .vb-card-medium {{ border-left: 4px solid {BRAND_STEEL}; box-shadow: 0 4px 20px rgba(58,64,74,0.08); }}
-  .vb-card-low    {{ border-left: 4px solid {BRAND_AMBER}; box-shadow: 0 4px 20px rgba(217,119,6,0.08); }}
+  .vb-card:hover {{ box-shadow: 0 0 0 1px rgba(0,0,0,0.03), 0 3px 10px rgba(0,0,0,0.05); }}
+  .vb-card-high   {{ border-left: 3px solid {BRAND_GREEN}; }}
+  .vb-card-high:hover   {{ border-color: #e2e8f0; border-left-color: {BRAND_GREEN}; box-shadow: 0 0 0 1px rgba(0,168,107,0.18); }}
+  .vb-card-medium {{ border-left: 3px solid {BRAND_STEEL}; }}
+  .vb-card-medium:hover {{ border-color: #e2e8f0; border-left-color: {BRAND_STEEL}; box-shadow: 0 0 0 1px rgba(58,64,74,0.14); }}
+  .vb-card-low    {{ border-left: 3px solid {BRAND_AMBER}; }}
+  .vb-card-low:hover    {{ border-color: #e2e8f0; border-left-color: {BRAND_AMBER}; box-shadow: 0 0 0 1px rgba(217,119,6,0.16); }}
 
   .vb-match   {{ font-size: 1.05rem; font-weight: 700; color: {BRAND_DARK}; margin: 0; font-family: 'Space Grotesk', sans-serif; }}
   .vb-meta    {{ font-size: 0.77rem; color: #64748b; margin-top: 3px; font-family: 'IBM Plex Mono', monospace; }}
@@ -286,7 +303,7 @@ st.markdown(f"""
   .ev-pill {{
     display: inline-flex; align-items: center; gap: 5px;
     font-size: 1.15rem; font-weight: 700;
-    padding: 5px 14px; border-radius: 8px;
+    padding: 5px 14px; border-radius: 4px;
     font-family: 'IBM Plex Mono', monospace; letter-spacing: .5px;
   }}
   .ev-high   {{ background: rgba(0,168,107,0.10); color: {BRAND_GREEN}; border: 1px solid rgba(0,168,107,0.28); }}
@@ -295,7 +312,7 @@ st.markdown(f"""
 
   .conf-tag {{
     font-size: 0.70rem; font-weight: 600; padding: 2px 9px;
-    border-radius: 6px; display: inline-block;
+    border-radius: 4px; display: inline-block;
     font-family: 'IBM Plex Mono', monospace; letter-spacing: .3px;
   }}
   .conf-high   {{ background: rgba(0,168,107,0.09); color: {BRAND_GREEN}; border: 1px solid rgba(0,168,107,0.25); }}
@@ -319,7 +336,7 @@ st.markdown(f"""
   .vb-detail-val.blue  {{ color: {BRAND_STEEL}; }}
 
   /* ── Context badges ── */
-  .ctx-badge  {{ display:inline-block; font-size:.70rem; font-weight:600; padding:2px 9px; border-radius:6px; font-family:'Space Grotesk',sans-serif; }}
+  .ctx-badge  {{ display:inline-block; font-size:.70rem; font-weight:600; padding:2px 9px; border-radius:4px; font-family:'Space Grotesk',sans-serif; }}
   .ctx-title      {{ background:#fef9c3; color:#854d0e; border:1px solid #fde047; }}
   .ctx-champion   {{ background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }}
   .ctx-champ-won  {{ background:rgba(0,168,107,0.10); color:{BRAND_GREEN}; border:1px solid rgba(0,168,107,0.28); }}
@@ -339,9 +356,8 @@ st.markdown(f"""
   /* ── Odds hero block ── */
   .vb-odds-hero {{
     background: linear-gradient(135deg, #0A0D12 0%, #171B22 100%);
-    border-radius: 14px; padding: 14px 20px; text-align: center;
-    min-width: 110px; border: 1px solid rgba(0,168,107,0.22);
-    box-shadow: 0 0 18px rgba(0,168,107,0.12);
+    border-radius: 6px; padding: 14px 20px; text-align: center;
+    min-width: 110px; border: 1px solid rgba(0,168,107,0.28);
     flex-shrink: 0;
   }}
   .vb-odds-lbl {{
@@ -2311,8 +2327,8 @@ def main():
         """, unsafe_allow_html=True)
         st.divider()
         st.markdown(
-            '<div style="background:linear-gradient(135deg,rgba(0,168,107,0.12),rgba(0,168,107,0.03));'
-            'border:1px solid rgba(0,168,107,0.30);border-radius:10px;padding:9px 12px;margin-bottom:10px;'
+            f'<div style="background:linear-gradient(135deg,{GREEN_100},{GREEN_50});'
+            f'border:1px solid {GREEN_600};border-radius:6px;padding:9px 12px;margin-bottom:10px;'
             'display:flex;align-items:center;gap:8px">'
             + _sidebar_banner_html() +
             '</div>',
