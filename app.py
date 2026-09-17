@@ -117,11 +117,10 @@ st.markdown(f"""
   * {{ scroll-behavior: smooth; }}
 
   /* ── Signature texture: radar-grid, echoes the logo's rings ── */
-  [data-testid="stAppViewContainer"] > .main {{
+  .main, [data-testid="stMain"], [data-testid="stAppViewContainer"] {{
     background-image:
-      radial-gradient(rgba(0,168,107,0.10) 1px, transparent 1px);
-    background-size: 24px 24px;
-    background-position: -1px -1px;
+      radial-gradient(rgba(0,168,107,0.14) 1.1px, transparent 1.1px) !important;
+    background-size: 24px 24px !important;
   }}
 
   /* ── Global lively transitions ── */
